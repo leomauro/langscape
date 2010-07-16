@@ -1,0 +1,12 @@
+syntax: glob
+
+*.pyc
+*.pycov
+*._pyc
+*.pyo
+*.bak
+*.ees
+
+syntax: regexp
+
+^langlets/(?!python|gallery|p4d|coverage|ls_grammar|celeryder|TPython|c).*

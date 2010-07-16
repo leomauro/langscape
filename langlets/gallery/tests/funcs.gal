@@ -1,0 +1,47 @@
+#
+# This test requires gallery to run
+#
+
+def f_repeat_until(x):
+    repeat:
+        x-=1
+    until:
+        x<7
+    return x
+
+def f_on_stmt(x):
+    if x as m:
+        return m+1
+    return x
+
+def f_chainlet():
+    A = Chainlet()
+    B = Chainlet()
+    A1  = A()
+    A11 = A1()
+    A111= A11()
+    B1  = B()
+    B11 = B1()
+    B12 = B1()
+
+    C = A111
+    r = None
+    switch C:
+        case A:
+            r = A
+        case A11:
+            r = A11
+        case A111:
+            switch 1:
+                case 0:
+                    r = 99
+                case 2:
+                    r = 100
+            else:
+                r = A111
+    else:
+        r = "NOK"
+
+
+
+

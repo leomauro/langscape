@@ -1,0 +1,64 @@
+##################  automatically generated #############################
+
+LANGLET_ID = %LANGLET_ID%
+
+##################  user definable properties ###########################
+
+from langscape.ls_config import*
+
+#
+# User defined command line options. Options defined here are added to the
+# langscape command line options defined in langscape.ls_options
+#
+# Example:
+#   opt.add_option("-o", "--output", dest="output",  help="Report output")
+#
+
+import langscape.ls_cmdline_options
+opt = langscape.ls_cmdline_options.getoptions()
+
+#
+#  optional modules
+
+optional_modules = {
+	'importer': False,
+}
+
+
+#
+# compiled module suffix
+
+compiled_ext = %COMPILED_EXT%
+
+#
+# source module suffix
+
+source_ext = %SOURCE_EXT%
+
+#
+# command shell prompt
+
+prompt = %PROMPT%
+
+#
+# langlet name
+
+langlet_name = %LANGLET_NAME%
+
+#
+# name of parent langlet
+
+parent_langlet = %PARENT_LANGLET%
+
+#
+# transformation target
+
+target_langlet = %TARGET_LANGLET%
+
+#
+# used compiler -- ( see langscape.compiler for other compiler options )
+
+target_compiler = %TARGET_COMPILER%
+
+
+

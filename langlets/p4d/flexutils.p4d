@@ -1,0 +1,130 @@
+# -*- coding: UTF-8 -*-
+
+# flexutils.py is used to support some commands
+#
+
+import os
+import xmlutils
+import sys
+from langscape.util.minicommands import MiniCommand
+
+def mxcontrol(p4delement):
+    elem = p4delement.first_child()
+    elem.attribute("id", p4delement.tag)
+    return elem
+
+class ADLCmd(MiniCommand):
+    command  = "adl"
+
+class AMXMLCmd(MiniCommand):
+    if sys.platform == 'win32':
+        command  = "amxmlc.bat"
+    else:
+        command = "amxml"
+
+class flexprinter(xmlutils.xmlprinter):
+    def filter(self, *args, **kwd):
+        level = kwd.get("level",0)
+        tag = args[0]
+        if tag == "mx:Script":
+            if level:
+                IND_1 = " "*level*self._indentw
+                IND_2 = " "*(level+1)*self._indentw
+                S = args[-1].rstrip()
+                S = S.replace("\n", "\\n")
+                return tag, args[1], "\n%s<![CDATA[%s\n%s]]>\n%s"%(IND_2, S, IND_2, IND_1)
+            else:
+                return tag, args[1], "<![CDATA[%s]]>"%args[-1]
+        return args
+
+
+def air_adl(element, dirname):
+    adl_str = element.xmlstr(xml_declaration = True, xmlprinter = flexprinter)
+    file_name = element.name.text()+"-AIR-app.xml"
+    open(file_name, "w").write(adl_str)
+    adlcmd = ADLCmd()
+    adlcmd.prefix_args = [dirname.joinpath(file_name)]
+    adlcmd()
+
+def air_mxml(element, swf_file, dirname):
+    mxml_str = element.xmlstr(xml_declaration = True, xmlprinter = flexprinter)
+    file_name = swf_file.split(".swf")[0]+".mxml"
+    open(file_name, "w").write(mxml_str)
+    amxmlcmd = AMXMLCmd()
+    amxmlcmd.prefix_args = [dirname.joinpath(file_name)]
+    amxmlcmd()
+
+def run_swf(mxml_element, name, swf_name, out_path):
+    run_adl(name, swf_name, out_path)
+
+def exec_mxml(mxml_element, name, swf_name, out_path):
+    air_mxml(mxml_element, swf_name, out_path)
+    run_adl(name, swf_name, out_path)
+
+
+def run_adl(name, swf_name, out_pth, version = 0.1, air_vers = "1.5"):
+
+    elm application( xmlns= & "http://ns.adobe.com/air/application/"+air_vers):
+       id: &name
+       name: &name
+       filename: &name
+       version: &version
+       initialWindow:
+            content: &swf_name
+            visible: "true"
+    air_adl(application, out_pth)
+
+def runflex(langlet, input_file):
+    f = path(as_file)
+    component_name = f.splitext()[0].basename()
+    f_name = "".join(component_name.lower().split("_"))
+    m = P.search(f.read())
+    if not m:
+        raise RuntimeError("invalid actionscript file: package missing")
+    pck = m.group("package").strip()
+    if pck == "":
+        # main program
+        pass
+    else:
+        mxml_content = mxml_template%(pck, component_name)
+        pth = path().joinpath(*f.dirname().splitall()[:-pck.count(".")])
+        mxml_path = pth.joinpath("app"+f_name+".mxml")
+        open(mxml_path, "w").write(mxml_content)
+
+def convert2p4d(langlet, input_file):
+    out, ext = input_file.splitext()
+    if ext == ".mxml":
+        out = out+".p4d"
+        swf_name = input_file.splitext()[0].basename()
+        f_name   = "".join(input_file.splitext()[0].basename().lower().split("_"))
+        p4d_str = langlet.P4D.from_xml(open(input_file).read()).p4dstr(name = "p4ddoc")
+        p4d_str = p4d_str.replace("\\", "\\\\")
+        f_out = open(out,"w")
+        f_out.write("from EasyExtend.util.path import path\n")
+        f_out.write("from EasyExtend.langlets.p4d.flexutils import mxcontrol\n")
+        f_out.write("import EasyExtend.langlets.p4d.flexutils as flexutils\n\n")
+        f_out.write(p4d_str+"\n\n")
+        f_out.write("if __name__ == '__main__':\n")
+        f_out.write('    flexutils.exec_mxml(p4ddoc, "%s", "%s.swf", path(__file__).dirname())\n'%(f_name, swf_name))
+        f_out.close()
+    elif ext == ".as":
+        out = "run_"+out+".p4d"
+        swf_name = "run_"+input_file.splitext()[0].basename()
+        f_name   = "run_"+"".join(input_file.splitext()[0].basename().lower().split("_"))
+        f_out = open(out,"w")
+        f_out.write("from EasyExtend.util.path import path\n")
+        f_out.write("import EasyExtend.langlets.p4d.flexutils as flexutils\n\n")
+        #f_out.write(p4d_str+"\n\n")
+        f_out.write("if __name__ == '__main__':\n")
+        f_out.write('    flexutils.exec_mxml(p4ddoc, "%s", "%s.swf", path(__file__).dirname())\n'%(f_name, swf_name))
+        f_out.close()
+    else:
+        raise ValueError("wrong file extension: extension `.mxml` or `.as` required")
+
+
+def makeapp(node):
+    app = mx:Application( xmlns:mx="http://www.adobe.com/2006/mxml" ):
+        &node
+    return app
+
+

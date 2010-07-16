@@ -1,0 +1,29 @@
+from EasyExtend.langlets.p4d.p4dbase import P4D
+import EasyExtend.langlets.p4d.xmlutils as xmlutils
+import webbrowser
+import BeautifulSoup
+import re
+_bytelets = open(r"c:\projekte\fiber-space\EasyExtend\doc\p4d\_bytelets.html").read()
+#html = P4D.from_html(_bytelets).xmlstr()
+soup = BeautifulSoup.BeautifulSoup(_bytelets).first()
+p = re.compile('.*?rgb\\(236\\, 236\\, 236\)')
+#print p.match("background-color: rgb(236, 236, 236); vertical-align: top;")
+
+
+for T in soup.findAll("table", attrs={'style' : lambda expr: "font-family: courier new" in expr}):
+    columns = T.findAll("td")
+    if len(columns) == 1:
+        print T
+        print "---------------------------------------------------------------"
+
+
+#print html
+#for item in dir(soup):
+#    print item
+
+
+def test():
+    open(r"c:\projekte\fiber-space\EasyExtend\doc\p4d\_bytelets_convert.html", "w").write(html)
+    webbrowser.open(r"file:///c:\projekte\fiber-space\EasyExtend\doc\p4d\_bytelets_convert.html".replace("\\","/"))
+
+#test()

@@ -1,0 +1,138 @@
+#
+# This test requires gallery to run
+#
+import unittest
+import funcs
+import test_support
+import re
+
+
+class TestGallery(unittest.TestCase):
+    def test_ip(self):
+        self.assertEqual(127.0.0.1[0], 127)
+        self.assertEqual(127.0.0.192[2:], (0,192))
+
+    def test_thunk(self):
+        x = property:
+            def fget(self):
+                return self._x
+
+            def fset(self, value):
+                self._x = value
+
+    def test_repeat_until_1(self):
+
+        x = 9
+        repeat:
+            x-=1
+        until:
+            x==3
+
+        self.assertEqual(x,3)
+
+    def test_repeat_until_2(self):
+        x = 9
+        repeat:
+            x-=1
+        until: x==3
+        self.assertEqual(x,3)
+
+    def test_if_stmt_1(self):
+        def f(x):
+            if re.compile("x").match(x) as m:
+                return m.span()
+            return -1
+
+        self.assertEqual(f("x"),(0,1))
+        self.assertEqual(f("y"),-1)
+
+    def test_if_stmt_2(self):
+        def f(x):
+            if re.compile("x").match(x) as m:
+                return m.span()
+            elif re.compile("y").match(x) as m:
+                return m.span()
+            return -1
+        self.assertEqual(f("x"),(0,1))
+        self.assertEqual(f("y"),(0,1))
+
+    def test_if_stmt_3(self):
+        def f(x):
+            m = re.compile("x").match(x)
+            if m:
+                return m.span()
+            elif re.compile("y").match(x) as m:
+                return m.span()
+            return -1
+        self.assertEqual(f("x"),(0,1))
+        self.assertEqual(f("y"),(0,1))
+        self.assertEqual(f("z"),-1)
+
+    def test_if_stmt_4(self):
+        def f(x):
+            if re.compile("x").match(x) as m:
+                if m.span(0)[0] as k:
+                    return k
+                else:
+                    return 100
+            elif re.compile("y").match(x) as m:
+                return m.span()
+            return -1
+        self.assertEqual(f("x"),100)
+
+    def test_mixed(self):
+        d = {1:9}
+        x = 0
+        repeat:
+            if d.get(x) as m:
+                x = m
+            else:
+                x+=1
+        until:
+            x>3
+        self.assertEqual(x,9)
+
+    def test_switch_with_ips(self):
+        switch ip:
+            case 127.0.0.1:
+		        print "localhost"
+	        case	 192.168.1.33:
+		        print "wireless"
+        else:
+	        pass
+
+
+    def test_chainlet(self):
+        A = Chainlet()
+        B = Chainlet()
+        A1  = A()
+        A11 = A1()
+        A111= A11()
+        B1  = B()
+        B11 = B1()
+        B12 = B1()
+        C = A111
+        r = None
+        switch C:
+            case A:
+                r = A
+            case A11:
+                r = A11
+            case A111:
+                switch 1:
+                    case 0:
+                        r = 99
+                    case 2:
+                        r = 100
+                else:
+                    r = A111
+        else:
+            r = "No co-selection NOK"
+        self.assertEqual(r,A111)
+
+def test_main():
+    test_support.run_unittest(TestGallery)
+
+if __name__ == "__main__":
+    test_main()
+

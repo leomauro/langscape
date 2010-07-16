@@ -1,0 +1,61 @@
+# -*- coding: UTF-8 -*-
+
+team_1 = team(country="Germany", goals = 0):""
+team_2 = team(country="Greece", goals = 2):""
+
+game = monty-python-football:
+    {*
+        See also:
+
+            http://www.youtube.com/watch?v=ur5fGSBsfq8
+    *}
+    location: "München"
+    team(country="Deutschland"):
+        player(no=1):"Leibniz"
+        player(no=2):"I.Kant"
+        player(no=3):"Hegel"
+        player(no=4):"Schopenhauer"
+        player(no=5):"Schelling"
+        player(no=6):"Beckenbauer"     # Beckenbauer obviously a bit of a surprise there
+        player(no=7):"Jaspers"
+        player(no=8):"Schlegel"
+        player(no=9):"Wittgenstein"
+        player(no=10):"Nietzsche"
+        player(no=11):"Heidegger"
+
+    team(country="Griechenland"):
+        player(no=1):"Plato"
+        player(no=2):"Epiktet"
+        player(no=3):"Aristoteles"
+        player(no=4):"Sophokles"
+        player(no=5):"Empedokles"
+        player(no=6):"Plotin"
+        player(no=7):"Epikur"
+        player(no=8):"Heraklit"
+        player(no=9):"Demokrit"
+        player(no=10):"Sokrates"
+        player(no=11):"Archimedes"
+
+    referees:
+        main:"K'ung fu-tsze"
+        assistants:
+            linesman(no=1): "Saint Thomas Aquinas"
+            linesman(no=2): "Saint Augustine"
+    play:
+        half-time(no = 1):
+            team(country="Germany", goals = 0)
+            team(country="Greece", goals = 0)
+        half-time(no = 2):
+            team(country="Germany", goals = 0):
+                substitutes:
+                   subst(p4d:in="Marx", p4d:out="Wittgenstein")
+            team(country="Greece", goals = 2):
+                substitutes
+                goal-scorer(goal=1): "Sokrates"
+                goal-scorer(goal=2): "Sokrates"
+        final-score:
+            &team_1
+            &team_2
+
+
+

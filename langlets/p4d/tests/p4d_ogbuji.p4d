@@ -1,0 +1,21 @@
+# from http://www.xml.com/pub/a/2004/02/11/py-xml.html
+
+labels:
+    label(added="2003-06-20"):
+        quote:
+            # Mixed content
+            emph:
+                "Midwinter Spring"
+            "is its own season&#8230;"
+        name: "Thomas Eliot"
+        address:
+            street:"3 Prufrock Lane"
+            city:"Stamford"
+            state:"CT"
+    label(added="2003-06-10"):
+        name:"Ezra Pound"
+        address:
+            street:"45 Usura Place"
+            city:"Hailey"
+            state:"ID"
+

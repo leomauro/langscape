@@ -1,0 +1,7 @@
+message = soap:Envelope(xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/",
+          soap:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"):
+    soap:Body(xmlns:w="http://www.test.com/weather/"):
+        w:getWeatherResponse:
+            w:temperature: 78
+
+

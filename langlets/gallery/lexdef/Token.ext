@@ -1,0 +1,9 @@
+unit: char_start | dot_start | NEWLINE | NUMBER | LEFT | RIGHT | SPECIAL | OPERATOR | COLON | INTRON |  IPv4Address
+
+IPv4Address: Triple '.' Triple '.' Triple '.' Triple
+Triple: A_DIGIT [A_DIGIT] [A_DIGIT]
+
+
+
+
+

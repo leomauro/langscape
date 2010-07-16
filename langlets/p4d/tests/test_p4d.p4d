@@ -1,0 +1,428 @@
+# -*- coding: UTF-8 -*-
+
+import EasyExtend.util.unittest as unittest
+
+class TestP4DOperations(unittest.TestCase):
+    def setUp(self):
+        import p4d_football
+        self.game = p4d_football.game
+
+    def test_tag(self):
+        self.assertEqual(self.game.tag, "monty-python-football")
+
+    def test_element_access(self):
+        location = self.game.location
+        self.assertEqual(location[0].tag, "location")
+
+    def test_content_access(self):
+        self.assertEqual(self.game.location.text(), "München")
+
+    def test_comment_access(self):
+        self.assertEqual("http://www.youtube.com/watch?v=ur5fGSBsfq8" in self.game.comment(), True)
+
+    def test_attributes(self):
+        self.assertEqual(self.game.team[0].attributes(), {"country":"Deutschland"})
+
+    def test_attribute(self):
+        self.assertEqual(self.game.team[0].attribute("country"), "Deutschland")
+
+    def test_child(self):
+        self.assertEqual(self.game.child("team").tag, "team")
+
+    def test_child_failure(self):
+        self.assertRaises(ValueError, self.game.child, "bla")
+
+    def test_children(self):
+        self.assertEqual(len(self.game.children("team")), 2)
+
+    def test_children(self):
+        self.assertEqual(len(self.game.children()), 6)
+
+    def test_comment_is_child(self):
+        self.assertEqual(self.game.child('*').tag, '*')
+
+    def test_comment_children(self):
+        self.assertEqual(len(self.game.children('*')), 1)
+
+    def test_iteration(self):
+        for team in self.game.team:
+            for player in team.player:
+                if player.text() == "Leibniz":
+                    self.assertEqual(player.attribute("no"), "1")
+
+class TestP4DListOperations(unittest.TestCase):
+    def setUp(self):
+        import p4d_football
+        self.game = p4d_football.game
+
+    def setUp(self):
+        import p4d_football
+        self.game = p4d_football.game
+
+    def test_one_element_list(self):
+        self.assertEqual(type(self.game.play), P4DList)
+        self.assertEqual(self.game.play.attributes(), {})
+        self.assertRaises(KeyError, self.game.play.attribute, "bla")
+        self.assertEqual(self.game.play.text(), "")
+        self.assertEqual(self.game.play.comment(), "")
+        self.assertEqual(self.game.play.first_child().tag, "half-time")
+        self.assertEqual(self.game.play.child("half-time").tag, "half-time")
+        self.assertEqual(len(self.game.play.children("half-time")), 2)
+        self.assertEqual(len(self.game.play.children()), 3)
+
+    def test_two_element_list(self):
+        self.assertEqual(type(self.game.team), P4DList)
+        self.assertRaises(P4DAccessError, self.game.team.attributes)
+        self.assertRaises(P4DAccessError, self.game.team.attribute, "bla")
+        self.assertRaises(P4DAccessError, self.game.team.text)
+        self.assertRaises(P4DAccessError, self.game.team.comment)
+        self.assertRaises(P4DAccessError, self.game.team.first_child)
+        self.assertRaises(P4DAccessError, self.game.team.child, "half-time")
+        self.assertRaises(P4DAccessError, self.game.team.children)
+
+class TestP4DFilter(unittest.TestCase):
+    def setUp(self):
+        import p4d_football
+        self.game = p4d_football.game
+
+    def test_attribute_filter_1(self):
+        self.assertEqual(self.game.play.children("half-time").(@no == 1).team.(@country == "Greece").@goals, "0")
+        self.assertEqual(self.game.play.children("half-time").(@no == 2).team.(@country == "Greece").@goals, "2")
+
+    def test_attribute_filter_2(self):
+        players = [player.text() for player in self.game.team[0].player.(@no == 1 or @no == 3)]
+        self.assertEqual(players, ["Leibniz", "Hegel"])
+
+    def test_element_filter_1(self):
+        self.assertEqual(self.game.team.(player == "Leibniz").@country, "Deutschland")
+
+    def test_element_filter_2(self):
+        self.assertEqual(self.game.team.(player.text() == "Leibniz").@country, "Deutschland")
+
+    def test_element_wildcard(self):
+        self.assertEqual(self.game.team.(_ == "Leibniz").@country, "Deutschland")
+
+    def test_all_attrs(self):
+        self.assertEqual(self.game.play.child("half-time").@*,self.game.play.child("half-time").attributes())
+
+
+class TestP4DNamespaces(unittest.TestCase):
+    def setUp(self):
+        import p4d_soap
+        self.message = p4d_soap.message
+
+    def test_double_colon_attr(self):
+        self.assertEqual(self.message.@soap::encodingStyle, "http://schemas.xmlsoap.org/soap/encoding/")
+
+    def test_double_colon_element(self):
+        self.assertEqual(self.message.soap::Body.w::getWeatherResponse.w::temperature.text(), "78")
+
+    def test_message_ns_1(self):
+        ns_1 = self.message.namespace()
+        self.assertEqual(ns_1.prefix, "soap")
+        self.assertEqual(ns_1.uri, "http://schemas.xmlsoap.org/soap/envelope/")
+        ns_2 = self.message.soap::Body.namespace()
+        self.assertEqual(ns_2.prefix, "soap")
+        self.assertEqual(ns_2.uri, "http://schemas.xmlsoap.org/soap/envelope/")
+
+    def test_message_ns_2(self):
+        ns_2 = self.message.soap::Body.w::getWeatherResponse.namespace()
+        self.assertEqual(ns_2.prefix, "w")
+        self.assertEqual(ns_2.uri, "http://www.test.com/weather/")
+
+class Test_p4d_ns(unittest.TestCase):
+    def setUp(self):
+        class_def = p4d:class:
+            p4d:def(p4d:func_name = "f", arg0 = "x"):
+                p4d:print(p4d:exec = "encoded pseudo-function")
+
+        self.class_def = class_def
+
+    def test_attr_access(self):
+        self.assertEqual(self.class_def.p4d::def.@p4d::func_name, "f")
+
+    def test_xml_convert(self):
+        self.assertEqual(self.class_def.xmlstr().find("p4d"), -1)
+
+    def test_round_trip_convert(self):
+        class_def = P4D.from_xml(self.class_def.xmlstr())
+        self.assertEqual(class_def.p4d::def.@func_name, "f")
+        self.assertEqual(class_def.p4d::def.p4d::print.@p4d::exec, "encoded pseudo-function")
+
+class TestTextAndComment(unittest.TestCase):
+
+    def test_various_1(self):
+        import p4dutils
+        elm a:
+            '''
+            Some text.
+            '''
+            {*
+                One Comment
+            *}
+            {**
+                And a CDATA section.
+            **}
+        self.assertEqual(p4dutils.ignore_whitespace(a.text()), "Some text.")
+        self.assertEqual(p4dutils.ignore_whitespace(a.comment()), "One Comment")
+        self.assertEqual(p4dutils.ignore_whitespace(a.CDATA()), "And a CDATA section.")
+
+    def test_two_texts(self):
+        import p4dutils
+        elm a:
+            '''
+            One text.
+            '''
+            one-element          # the last text will be used...
+            '''
+            Another one.
+            '''
+        self.assertEqual(p4dutils.ignore_whitespace(a.text()), "Another one.")
+
+    def test_two_comments(self):
+        import p4dutils
+        elm a:
+            {*
+            One comment.
+            *}
+            one-element
+            {*
+            Another one.
+            *}
+        # the first comment will be accessed by comment()
+        self.assertEqual(p4dutils.ignore_whitespace(a.comment()), "One comment.")
+        self.assertEqual(len(a.children('*')), 2)
+
+
+class TestP4DElementSetter(unittest.TestCase):
+
+    def test_set_text1(self):
+        elm a:
+            b: 1
+        a.b = 2
+        self.assertEqual(a.b.text(), "2")
+
+    def test_set_text2(self):
+        elm a:
+            b: 1
+        a.b = "abc"
+        self.assertEqual(a.b.text(), "abc")
+
+    def test_set_element(self):
+        elm d:
+            b: 1
+        elm c:
+            d
+            e
+        c.d = d
+        self.assertEqual(c.d.b.text(), "1")
+
+    def test_set_element_fail(self):
+        elm a:
+            b: 1
+
+        elm c:
+            d
+            e
+        self.assertRaises(AttributeError, setattr, c, "d", a)
+
+    def test_susbst_element_sequence(self):
+        elm d:
+            b: 1
+
+        elm c:
+            d
+            e
+            d
+        self.assertEqual(len(c.d), 2)
+        self.assertRaises(P4DAccessError, c.__setattr__, "d",d)
+
+
+class TestPythonExprInP4D(unittest.TestCase):
+    def test_simple_var(self):
+        x = 0
+        elm a:
+            b: &x
+        self.assertEqual(a.b.text(), "0")
+
+    def test_simple_arith_expr(self):
+        x = 0
+        elm a:
+            b: &x+1
+        self.assertEqual(a.b.text(), "1")
+
+    def test_simple_functional_expr(self):
+        def foo(a):
+            return a+3
+        x = 0
+        elm a:
+            b: &foo(x+1)
+        self.assertEqual(a.b.text(), "4")
+
+    def test_element(self):
+        elm x:
+            c: '0'
+        elm a:
+            b: &x
+        self.assertEqual(a.b.x.c.text(), "0")
+
+    def test_nested_elements(self):
+        y = 1
+        elm x:
+            c: &y
+        elm a:
+            b: &x
+        self.assertEqual(a.b.x.c.text(), "1")
+
+    def test_attrs(self):
+        y = 2
+        elm x(c = &y d = &y**2):
+            b: 0
+        self.assertEqual(x.@c, "2")
+        self.assertEqual(x.@d, "4")
+
+    def test_simple_list(self):
+        L = [1,2,3]
+        elm a:
+            b: &L
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual([int(b.text()) for b in a.b], L)
+
+    def test_simple_tuple(self):
+        T = (1,2,3)
+        elm a:
+            b: &T
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual([int(b.text()) for b in a.b], list(T))
+
+    def test_tuple_direct(self):
+        elm a:
+            b: (1,2,3)
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual([int(b.text()) for b in a.b], [1,2,3])
+
+    def test_list_direct(self):
+        elm a:
+            b: [1,2,3]
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual([int(b.text()) for b in a.b], [1,2,3])
+
+    def test_list_of_elements(self):
+        elm x:0
+        elm y:1
+        elm a:
+            b: &[x,y]
+        self.assertEqual(len(a.b), 1)
+        self.assertEqual(a.b.x.text(), "0")
+        self.assertEqual(a.b.y.text(), "1")
+
+    def test_mixed_direct_list(self):
+        elm x:0
+        elm y:1
+        elm a:
+            b: &[x,"blu", y, 2]
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual(a.b[0].x.text(), "0")
+        self.assertEqual(a.b[1].text(), "blu")
+        self.assertEqual(a.b[0].y.text(), "1")
+        self.assertEqual(a.b[2].text(), "2")
+
+    def test_mixed_list(self):
+        elm x:0
+        elm y:1
+        L = [x,"blu", y, 2]
+        elm a:
+            b: &L
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual(a.b[0].x.text(), "0")
+        self.assertEqual(a.b[1].text(), "blu")
+        self.assertEqual(a.b[0].y.text(), "1")
+        self.assertEqual(a.b[2].text(), "2")
+
+    def test_seq_of_lists(self):
+        elm build:
+            ignore:
+                suffix:[".pyc", ".pyo"]
+                prefix: ['.']
+                dirs:["backups","backup"]
+        self.assertEqual(len(build.ignore.children()),5)
+        self.assertEqual(len(build.ignore.suffix),2)
+        self.assertEqual(len(build.ignore.dirs),2)
+
+    def test_seq_of_lists_2(self):
+        L1 = [".pyc", ".pyo"]
+        L2 = ["backups","backup"]
+        elm build:
+            ignore:
+                suffix:&L1
+                prefix: ['.']
+                dirs:&L2
+        self.assertEqual(len(build.ignore.children()),5)
+        self.assertEqual(len(build.ignore.suffix),2)
+        self.assertEqual(len(build.ignore.dirs),2)
+
+    def test_embedd_str(self):
+        S = "bla"
+        elm a:
+            &S
+            B: "x"
+        self.assertEqual(a.text(), "bla")
+
+    def test_embedd_str_and_list(self):
+        S = "bla"
+        L = ["foo", "bar"]
+        elm a:
+            &S
+            B: &L
+        self.assertEqual(a.text(), "bla")
+        self.assertEqual(len(a.B), 2)
+
+    def test_mixed_embeddings(self):
+        S = "bla"
+        T = "blub"
+        L = ["foo", "bar"]
+        elm a:
+            &S
+            B: &L
+            C: [1,2,3]
+            D: &T
+            &T
+            E: [4,5,6]
+        self.assertEqual(a.text(), "blablub")
+        self.assertEqual(a.content(), ["bla", "blub"])
+        self.assertEqual(len(a.B), 2)
+        self.assertEqual([int(e.text()) for e in a.E], [4,5,6])
+
+    def test_embedd_seq_of_same_element(self):
+        br = br:""
+        elm html:
+            h1: "Header1"
+            & [br, br, br]
+            h2: "Header2"
+        print html.xmlstr()
+        #self.assertEqual(a.text(), "bla")
+
+class TestP4DUpdate(unittest.TestCase):
+    def test_add_element(self):
+        elm a:
+            b:
+                c: 0
+        elm d:
+            2
+        a.b.add(d)
+        a.b.add(d)
+        self.assertEqual(len(a.b.children()), 3)
+        self.assertEqual(len(a.b[0]._tree[2]), 3)
+
+
+# notice that this runs with a slightly modified version of unittest
+
+unittest.run_unittest(TestP4DOperations)
+unittest.run_unittest(TestP4DListOperations)
+unittest.run_unittest(TestP4DFilter)
+unittest.run_unittest(TestP4DNamespaces)
+unittest.run_unittest(Test_p4d_ns)
+unittest.run_unittest(TestTextAndComment)
+unittest.run_unittest(TestP4DElementSetter)
+unittest.run_unittest(TestPythonExprInP4D)
+unittest.run_unittest(TestP4DUpdate)

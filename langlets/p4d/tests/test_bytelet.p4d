@@ -1,0 +1,498 @@
+# -*- coding: UTF-8 -*-
+
+import EasyExtend.util.unittest as unittest
+from copy import copy
+
+
+class TestBytelet(unittest.TestCase):
+
+    def test_bytelet_creation(self):
+        elm bl:a:
+            b:00
+        self.assertEqual(isinstance(a, Bytelet), True)
+
+    def test_bytelet_fields(self):
+        elm bl:a:
+            b: 00
+            c: 0
+        self.assertEqual(isinstance(a.b[0], Bytelet), True)
+        self.assertEqual(isinstance(a.c[0], Bytelet), True)
+
+    def test_bytelet_nested(self):
+        b = bl:b:
+            x : 01
+        a = bl:a:
+            b: 00
+            &b
+        self.assertEqual(type(a.bl::b.x.hex()), Hex)
+        self.assertEqual(a.bl::b.x.hex(), 0x01)
+
+    def test_bytelet_nested_sub(self):
+        elm bl:b:
+            x: 01
+
+        elm bl:a:
+            b: &b
+        self.assertEqual(a.b.bl::b.x.hex(), "01")
+
+
+class TestFlow(unittest.TestCase):
+    def test_flow(self):
+        self.assertEqual((LEN+1)._structure, [('+', 1)])
+        self.assertEqual((LEN+1+3)._structure, [('+', 1), ('+', 3)])
+        self.assertEqual((3*LEN+1)._structure, [('*', 3), ('+', 1)])
+
+    def test_compute(self):
+        self.assertEqual((LEN+1).compute(2), 3)
+        self.assertEqual((1-LEN).compute(1), 0)
+        self.assertEqual(LEN["bla"]._field_ref, "bla")
+
+    def test_copy(self):
+        K1 = LEN+1
+        K2 = copy(LEN+1)
+        K2._value = 9
+        self.assertNotEqual(K1._value, K2._value)
+
+
+class TestLEN(unittest.TestCase):
+
+    def test_simple_field(self):
+        elm bl:a:
+            Tag: 00
+            Len: &LEN
+            F1: 01
+            F2: 01
+        self.assertEqual(a.Len.hex(), 0x02)
+
+    def test_no_field(self):
+        elm bl:a:
+            Tag: 00
+            Len: &LEN
+        self.assertEqual(a.Len.hex(), 0x00)
+
+    def test_field_ref(self):
+        elm bl:a:
+            Tag: 00
+            Len: &LEN["B"]+1
+            A: 01
+            B: "123"
+        self.assertEqual(a.Len.hex(), 3)
+
+    def test_nested(self):
+        elm bl:a:
+            Tag: 0x00
+            Len: &LEN
+            Val: 0x07
+
+        elm bl:b:
+            Tag: 0x01
+            Len:&LEN
+            &a
+            &a
+        self.assertEqual(b.Len.content(), 6)
+
+    def test_multi_len(self):
+        elm bl:a:
+            Tag: 0x00
+            Len1: &LEN
+            Val1: 0x07
+            Len2: &LEN
+            Val2: 0x04
+        self.assertEqual(a.Len2.hex(), 1)
+        self.assertEqual(a.Len1.hex(), 3)
+
+
+class TestHex(unittest.TestCase):
+    def test_simple_hex(self):
+        elm bl:a:
+            x: 0x01
+            y: 0x89A7
+
+        self.assertEqual(a.hex(), 0x0189A7)
+
+    def test_field_hex(self):
+        elm bl:a:
+            x: 0x01
+            y: 0x89A7
+
+        self.assertEqual(a.x[0].hex(), 0x01)
+
+    def test_hex_with_len(self):
+        a = bl:a:
+            x: 0x01
+            l: &LEN
+            y: 0x89A7
+        self.assertEqual(a.hex(), 0x010289A7)
+
+    def test_nested(self):
+        elm bl:a:
+            x: 0x01
+            l: &LEN
+            y: 0x89A7
+
+        elm bl:b:
+            x: 0x09
+            &a
+            y: 0x55
+        self.assertEqual(b.hex(), "09010289A755")
+
+
+class TestByteletUpdate(unittest.TestCase):
+    def test_change_value(self):
+        a = bl:a:
+            x: 0x01
+            l: &LEN
+            y: 0x89
+            z:
+                t: 0x02
+                l: &LEN
+                v:
+                    t: 0x03
+                    l: &LEN
+                    v: 0x0507
+        self.assertEqual(a.l.hex(), 7)
+        a.z.v.v = 0x08
+        self.assertEqual(a.l.hex(), 6)
+        a.z.v.v = "01 02 03"
+        self.assertEqual(a.l.hex(), 8)
+        a.z.v.v = "01 02 03 04"
+        self.assertEqual(a.z.l.hex(), 6)
+        a.y = "01 02"
+        self.assertEqual(a.z.l.hex(), 6)
+
+    def test_del_value(self):
+        a = bl:a:
+            x: 0x01
+            l: &LEN - 1
+            y: 0x89
+            z:
+                t: 0x02
+                l: &LEN
+                v:
+                    t: 0x03
+                    l: &LEN
+                    v: 0x0507
+                w:
+                    t: 0x04
+                    l_x: &LEN["x"]
+                    v: "{ab}"
+                    x: "{bla}"
+
+        self.assertEqual(a.z.w.v.hex(), "{ab}")
+        self.assertEqual(a.z.w.l_x.hex(),  3)
+        self.assertEqual(a.l.hex(), 13)
+        del a["y"]
+        self.assertEqual(a.l.hex(), 12)
+
+
+
+class TestCloneBytelet(unittest.TestCase):
+    def test_clone(self):
+        a = bl:a:
+            x: 0x01
+            l: &LEN
+            y: 0x89
+            z:
+                t: 0x02
+                l: &LEN
+                v:
+                    t: 0x03
+                    l: &LEN
+                    v: 0x0507
+
+        cloned = a.z.clone()
+        self.assertEqual(cloned.v.v.hex(), 0x0507)
+        cloned.v.v = 0x060708
+        self.assertEqual(cloned.v.v.hex(), 0x060708)
+        self.assertEqual(a.z.v.v.hex(), 0x0507)
+
+    def test_clone_with_bits(self):
+        elm bl:a:
+            b(w = 0b3):1
+            c(w = 0b10): 0x77
+            d: 0x55
+            d(w = 0b3): 2
+
+        cloned = a.clone()
+        self.assertEqual(a.p4dstr(), cloned.p4dstr())
+        self.assertEqual(a.hex(), cloned.hex())
+        print a.hex()
+
+
+class TestByteletSchemaStd(unittest.TestCase):
+    def test_schema_built(self):
+        elm bl-schema:function:
+            Tag: 0x0f
+            Len: &LEN
+            FuncType: 1
+        self.assertEqual(isinstance(function, ByteletSchema), True)
+        self.assertEqual(function.Len.hex(), 1)
+
+    def test_field_val(self):
+        elm bl-schema:function:
+            Tag: 1
+            Len: &LEN
+            FuncType: &VAL
+
+        self.assertRaises(RuntimeError, function.hex)
+        hexcode = "08 02 89 AA"
+        bl = function.parse(hexcode)
+        self.assertEqual(bl.Tag.hex(), 0x08)
+        self.assertEqual(bl.Len.hex(), 0x02)
+        self.assertEqual(bl.FuncType.hex(), "89 AA")
+
+    def test_parse_strict(self):
+        elm bl-schema:function:
+            Tag: 1
+            Len: &LEN
+            Val:
+                Tag: 1
+                Len: &LEN
+                F1: 1
+                F2: &VAL - 1
+        hexcode = "07 05 08 03 F1 F2 AA"
+        bl = function.parse(hexcode)
+        self.assertEqual(bl.Tag.hex(), 0x07)
+        self.assertEqual(bl.Len.hex(), 0x05)
+        self.assertEqual(bl.Val.Tag.hex(), "08")
+        self.assertEqual(bl.Val.Len.hex(), "03")
+        self.assertEqual(bl.Val.F1.hex(), "F1")
+        self.assertEqual(bl.Val.F2.hex(), "F2 AA")
+        hexcode = "07 05 08 03 F1 F2"
+        self.assertRaises(ParserError, function.parse, hexcode)
+        hexcode = "07 05 08 03 F1 F2 AA 05"
+        self.assertRaises(ParserError, function.parse, hexcode)
+        hexcode = "07 05 08 03 F1"
+        self.assertRaises(ParserError, function.parse, hexcode)
+
+    def test_parse_with_hexmatch(self):
+        elm bl-schema:function:
+            Tag: 1
+            Len: &LEN
+            Val:
+                Tag: 0x08
+                Len: &LEN
+                F1: 1
+                F2: &VAL - 1
+        hexcode = "07 05 08 03 F1 F2 AA"
+        bl = function.parse(hexcode)
+
+class TestByteletSchemaTLVList(unittest.TestCase):
+    def test_schema_built(self):
+
+        elm bl-schema:testbl_schema(use="tlvlist"):
+            Main(tag= 0x05):
+                Par(tag= 0x0f)
+                Txt(tag= 0x01)
+
+        self.assertEqual(isinstance(testbl_schema, ByteletSchema), True)
+
+        elm bl:testbl:
+            Tag: 0x05
+            Len: &LEN
+            Val:
+                Txt:
+                    Tag: 0x01
+                    Len: &LEN
+                    DCS: 0x04
+                    Text: "{Some tekst}"
+                Txt:
+                    Tag: 0x01
+                    Len: &LEN
+                    DCS: 0x04
+                    Text: "{More teqst}"
+                Par:
+                    Tag: 0x0f
+                    Len: &LEN
+                    F: 0x01 0x02 0x03 0x04
+        hexcode = testbl.hex()
+        bl = testbl_schema.parse(hexcode)
+        self.assertEqual(bl.tag, "Main")
+        self.assertEqual(bl.Par.Tag.hex(), 0x0F)
+        self.assertEqual(bl.Par.Len.hex(), 4)
+        self.assertEqual(len(bl.Txt), 2)
+
+    def test_schema_with_std(self):
+
+        elm bl-schema:testbl_schema(use="tlvlist"):
+            Main(tag= 0x05):
+                Par(tag= 0x0f use = "std"):
+                    Tag: 0x0f
+                    Len: 1
+                    F: &VAL
+                Txt(tag= 0x01 use = "std"):
+                    Tag: 0x01
+                    Len: &LEN
+                    DCS: 1
+                    Text: &VAL-1
+
+        self.assertEqual(isinstance(testbl_schema, ByteletSchema), True)
+
+        elm bl:testbl:
+            Tag: 0x05
+            Len: &LEN
+            Val:
+                Txt:
+                    Tag: 0x01
+                    Len: &LEN
+                    DCS: 0x04
+                    Text: "{Some tekst}"
+                Txt:
+                    Tag: 0x01
+                    Len: &LEN
+                    DCS: 0x04
+                    Text: "{More teqst}"
+                Par:
+                    Tag: 0x0f
+                    Len: &LEN
+                    F: 0x01 0x02 0x03 0x04
+        hexcode = testbl.hex()
+        bl = testbl_schema.parse(hexcode)
+        self.assertEqual(bl.tag, "Main")
+        self.assertEqual(bl.Par.Tag.hex(), 0x0F)
+        self.assertEqual(bl.Par.Len.hex(), 4)
+        self.assertEqual(bl.Par.F.hex(), 0x01 0x02 0x03 0x04)
+        self.assertEqual(len(bl.Txt), 2)
+
+    def test_schema_deep_nesting(self):
+
+        elm bl-schema:testbl_schema(use="tlvlist"):
+            Main(tag= 0x05):
+                Par(tag= 0x0f)
+                Txt(tag= 0x01):
+                    Item(tag = 0x07):
+                        SubItem(tag = 0x09)
+        elm bl:testbl:
+            Tag: 0x05
+            Len: &LEN
+            Val:
+                Txt:
+                    Tag: 0x01
+                    Len: &LEN
+                    Val:
+                        Item:
+                            Tag: 0x07
+                            Len: &LEN
+                            Val: 0x01 0x02
+                        Item:
+                            Tag: 0x07
+                            Len: &LEN
+                            Val:
+                                SubItem:
+                                    Tag: 0x09
+                                    Len: &LEN
+                                    F1: "{some teqst}"
+                                SubItem:
+                                    Tag: 0x09
+                                    Len: &LEN
+                                    F1: "{more tekst}"
+
+        hexcode = testbl.hex()
+        bl = testbl_schema.parse(hexcode)
+
+
+class TestByteletBitSchema(unittest.TestCase):
+    def _test_simple_bitschema(self):
+        elm bl-schema:bmp:
+            F1: 0b3
+            F2: 0b9
+            F3: 0b4
+        self.assertEqual(isinstance(bmp, ByteletSchema), True)
+        bl = bmp.parse(0x45 0x67)
+        self.assertEqual(bl.F1.hex(),2)
+        self.assertEqual(bl.F2.hex(),0x56)
+        self.assertEqual(bl.F3.hex(),7)
+
+    def test_bits_and_one_byte(self):
+        elm bl-schema:bmp:
+            F1: 0b4
+            F2: 1
+            F3: 0b4
+        self.assertEqual(isinstance(bmp, ByteletSchema), True)
+        bl = bmp.parse(0x45 0x67)
+        self.assertEqual(bl.F1.hex(),4)
+        self.assertEqual(bl.F2.hex(),0x56)
+        self.assertEqual(bl.F3.hex(),7)
+
+    def test_incomplete_bitarray(self):
+        elm bl-schema:bmp:
+            F1: 0b4
+            F2: 0b4
+            F3: 0b5
+
+        self.assertEqual(isinstance(bmp, ByteletSchema), True)
+        self.assertRaises(ParserError, bmp.parse, 0x45 0x67)
+
+    def test_bitarray_overflow(self):
+        elm bl-schema:bmp:
+            F1: 0b4
+            F2: 0b4
+            F3: 0b12
+        self.assertEqual(isinstance(bmp, ByteletSchema), True)
+        self.assertRaises(ParserError, bmp.parse, 0x45 0x67)
+
+    def test_value_does_not_fit(self):
+        elm bl-schema:bmp:
+            F1(w=0b3): 5
+            F2(w=0b5): 0x45
+        self.assertRaises(TypeError, bmp.hex)
+
+    def test_align_1(self):
+        elm bl:btl:
+            Tag(w=0b4): 0x0A
+            Len(w=0b16):&RAWLEN
+            DCS(w=0b4): 0x04
+            Text:"{Some Text}"
+        hx = btl.hex()
+        self.assertEqual(hx[:3], 0xA0 0x00 0xA4)
+
+
+    def test_scan_ipv4_header(self):
+        elm bl-schema:ipv4_msg:
+            Version: 0b4
+            IHL: 0b4
+            TOS: 1
+            Len: 2
+            Ident: 2
+            Flags: 0b3
+            FragmentOffset: 0b13
+            TTL: 1
+            Protocol: 1
+            Checksum: 2
+            SourceAddress: 4
+            DestAddress: 4
+            Rest: &VAL["IHL"]*4-20
+            data: &VAL - VAL["IHL"]*4
+
+        elm bl:msg:
+            Version(w=0b4):0b4
+            IHL(w=0b4):0b5
+            TOS: 0
+            Len(w=0b16): &LEN + 4
+            Ident(w=0b16): 0b111
+            Flags(w=0b3):0
+            FragmentOffset(w=0b13): 1
+            TTL: 0b123
+            Protocol: 1
+            Checksum: 0xFFFF
+            SourceAddress:0x7F 0x00 0x00 0x00
+            DestAddress:0x7F 0x00 0x00 0x00
+            data: 0xAA
+        hx = msg.hex()
+        self.assertEqual(hx[0], 0x45)
+        self.assertEqual(msg.Len.hex() , 0x15)
+        #print ipv4_msg.parse(msg.hex()).p4dstr()
+
+
+unittest.run_unittest(TestBytelet)
+unittest.run_unittest(TestFlow)
+unittest.run_unittest(TestLEN)
+unittest.run_unittest(TestHex)
+unittest.run_unittest(TestByteletUpdate)
+unittest.run_unittest(TestCloneBytelet)
+unittest.run_unittest(TestByteletSchemaStd)
+unittest.run_unittest(TestByteletSchemaTLVList)
+unittest.run_unittest(TestByteletBitSchema)
+
+
+

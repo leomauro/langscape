@@ -11,14 +11,17 @@ __all__ = ["create_lex_nfa",
 
 import pprint
 
-USE_EE = False
-
 import langscape
 import langscape.util
 import langscape.trail.nfaexpansion as nfaexpansion
 from langscape.trail.nfadef import*
 
+USE_EE = False
+
 if USE_EE:
+    # This is used for ls_grammar updates only
+    # Install EasyExtend 3 if you intend to modify the basic
+    # EBNF grammar used by langscape
     from EasyExtend.langlets.grammar_langlet.rules import*
 else:
     from langscape.langlets.ls_grammar.rules import*

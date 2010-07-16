@@ -132,6 +132,8 @@ class GrammarUpdater(object):
         raise RuntimeError("LANGLET_ID not found")
 
     def track_change(self):
+        if self.langlet_name == "ls_grammar":  # don't update grammar automatically!
+            return False
         pth_nfa = self.nfa_path()
         pth_sym = self.symbol_path()
         if more_recent(self.grammar_base_path(), pth_nfa) or \

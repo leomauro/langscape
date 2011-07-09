@@ -11,6 +11,8 @@ old/*.*
 *.log
 *.pcv
 notes/*.*
+_experimental/*.*
+_experimental/*
 
 
 syntax: regexp

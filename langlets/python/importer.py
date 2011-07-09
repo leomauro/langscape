@@ -1,11 +1,17 @@
 ###############  langlet importer definition ##################
 
 # URL:     http://www.fiber-space.de
-# Author:  Kay Schluehr <easyextend@fiber-space.de>
+# Author:  Kay Schluehr <kay at fiber-space.de>
 # Date:    10 May 2006
 
 # This module isn't generic for anything but Python derivatives and it shouldn't be used
 # by Python but only by Langlets derived from Python.
+
+'''
+Execution logic:
+
+    Let UP be the user defined path ( command-line path) to the module passed into run_module()
+'''
 
 from __future__ import with_statement
 import sys
@@ -14,16 +20,11 @@ import langscape.util.ihooks as ihooks
 import zipimport
 import imp
 import os
+from langscape.base.importer import dbg_import
+from langscape.base.module_descriptor import LangletModuleDescriptor
+import __main__
 
 __all__ = ["dbg_import", "LSImporter", "LSModuleFilter", "import_from_langlet"]
-
-def dbg_import(text):
-    # lightweight logging function
-    frame  = sys._getframe()
-    f_name = frame.f_back.f_code.co_name
-    f_line = frame.f_back.f_lineno
-    sys.stdout.write("dbg-import: %s: %s: %s\n"%(f_name, f_line, text))
-
 
 class LangletHooks(ihooks.Hooks):
     def __init__(self, langlet):
@@ -42,7 +43,7 @@ class LangletHooks(ihooks.Hooks):
                 break
         else:
             if not self.langlet.options.get("ignore_compiled"):
-                self.suffixes.insert(0,(compiled_ext, 'rb', 2))
+                self.suffixes.insert(0, (compiled_ext, 'rb', 2))
         for (ext, code, prio) in self.suffixes:
             if source_ext == ext:
                 break
@@ -50,8 +51,8 @@ class LangletHooks(ihooks.Hooks):
             self.suffixes.insert(1,(source_ext, 'U', 1))
 
     def get_suffixes(self):
-        # sys.stdout.write("get_suffixes: langlet: %s\n"%self.langlet)
-        # sys.stdout.write("get_suffixes: suffixes: %s\n"%self.suffixes)
+        #sys.stdout.write("get_suffixes: langlet: %s\n"%self.langlet)
+        #sys.stdout.write("get_suffixes: suffixes: %s\n"%self.suffixes)
         return self.suffixes
 
 
@@ -108,6 +109,7 @@ class LSModuleLoader(ihooks.ModuleLoader):
                 else:
                     f = (datetime, fullname, mode, info )
         if f:
+            # dbg_import("find-info: "+str(f))
             try:
                 fp = self.hooks.openfile(f[1], f[2])
                 return fp, f[1], f[-1]
@@ -119,17 +121,18 @@ class LSModuleLoader(ihooks.ModuleLoader):
         #     sys.stdout.write("find_module: suffixes: %s\n"%self.hooks.get_suffixes())
         if path is None:
             path = [None] + self.default_path()
-        for dir in path:
-            stuff = self.find_module_in_dir(name, dir)
+        for _dir in path:
+            stuff = self.find_module_in_dir(name, _dir)
             # sys.stdout.write("find_module: %s in dir: %s -> %s\n"%(name, dir, stuff))
             if stuff:
                 return stuff
         return None
 
+
 class ModuleFilter(object):
     def __init__(self, langlet):
         self.langlet  = langlet
-        self.dbg          = langlet.options.get("debug_importer")
+        self.dbg      = langlet.options.get("debug_importer")
         self.module_blacklist = set(["langlet.py",
                                      "langlet_config.py"])
         self.dir_blacklist = set(["langscape.trail",
@@ -143,6 +146,8 @@ class ModuleFilter(object):
     def pre_filter(self, fpth_mod):
         if not path(fpth_mod).ext == u".py":
             return True
+        if not self.is_langletmodule(fpth_mod):
+            return False
         fpth_dir = path(fpth_mod.lower()).dirname()
         if fpth_dir.basename() in ("lexdef", "parsedef", "langscape", "cstdef", "trail"):
             return False
@@ -151,26 +156,28 @@ class ModuleFilter(object):
         return True
 
     def is_mainmodule(self, fpth_m):
-        _main_mod = self.langlet.options.get("main_module")
-        if _main_mod:
-            module_name, _mod = _main_mod
-            if module_name == fpth_m.basename():
-                return True
+        r = (self.langlet.importer.module_descr.fpth_mod_full.splitext()[0] == fpth_m.splitext()[0])
+        if r:
+            return True
+        return False
+
 
     def accept_module(self, fpth_mod):
         '''
         Method used to determine if a langlet accepts module for langlet-specific import.
         @param fpth_mod: a path object specifying the complete module path.
         '''
-        # sys.stdout.write("eeimporter.py: check-module-for acceptance %s\n"%fpth_mod)
+        if self.dbg:
+            sys.stdout.write("accept_module: check-module-for acceptance %s\n"%fpth_mod)
         if self.pre_filter(fpth_mod):
             if self.dbg:
                 dbg_import("pre-filtered o.k:`%s`"%fpth_mod)
-            if self.is_langletmodule(fpth_mod):
-                return True
             if self.is_mainmodule(fpth_mod):
                 return True
+            if self.is_langletmodule(fpth_mod):
+                return True
         return False
+
 
 class LangletImporter(object):
 
@@ -178,12 +185,23 @@ class LangletImporter(object):
         '''
         :param langlet: langlet module object
         '''
-        self.langlet      = langlet
-        self.fpth_langlet = self.langlet_path()
-        self.fpth_mod     = None
-        self.loader       = self.module_loader()
-        self.dbg          = langlet.options.get("debug_importer")
-        self.modulefilter = modfilter(langlet)
+        self.langlet        = langlet
+        self.fpth_langlet   = self.langlet_path()
+        self.loader         = self.module_loader()
+        self.dbg            = langlet.options.get("debug_importer")
+        self.modulefilter   = modfilter(langlet)
+        md = LangletModuleDescriptor()
+        md.fpth_mod_input = path(langlet.config.__file__)
+        md.compute_module_path()
+        self.module_descr   = md
+
+    def prepare(self):
+        '''
+        The ``prepare`` method is called from ``register_importer``. Overwrite this method in subclasses.
+        '''
+
+    def set_module_descriptor(self, module_descriptor):
+        self.module_descr = module_descriptor
 
     def langlet_path(self):
         return self.langlet.path
@@ -192,13 +210,14 @@ class LangletImporter(object):
         return LSModuleLoader(hooks = LangletHooks(self.langlet))
 
     def register_importer(self):
+        self.prepare()
         if self.dbg:
             dbg_import(str(self))
         pth = str(self.fpth_langlet)
         if pth not in sys.path:
             sys.path.append(pth)
         if not self in sys.meta_path:
-            sys.meta_path.append(self)
+            sys.meta_path.insert(0,self)
 
     def find_module(self, mpth_mod, mpth_pack = None):
         '''
@@ -215,12 +234,16 @@ class LangletImporter(object):
                     del mpth_pack[0]
         package = ""
         idx = mpth_mod.rfind(".")  # maybe dotted module name ?
-        if self.dbg:
-            dbg_import("input: module: `%s`"%mpth_mod)
-            dbg_import("input: package:`%s`"%mpth_pack)
         if idx>0:
             package, mpth_mod = mpth_mod[:idx], mpth_mod[idx+1:]
             mpth_pack = sys.modules[package].__path__
+
+        if mpth_pack and mpth_pack[0].endswith("encodings"):
+            return
+
+        if self.dbg:
+            dbg_import("input: module: `%s`"%mpth_mod)
+            dbg_import("input: package:`%s`"%mpth_pack)
 
         moduledata  = self.loader.find_module(mpth_mod, mpth_pack)
 
@@ -238,15 +261,16 @@ class LangletImporter(object):
             else:
                 raise ImportError("No module named %s found."%mpth_mod)
         if self.dbg:
-            sys.stdout.write("dbg-importer: find_module: moduledata: `%s`\n"%(moduledata[1:],))
+            dbg_import("moduledata: `%s`\n"%(moduledata[1:],))
         if not moduledata[1]:
             return
+
         self.fpth_mod = path(moduledata[1])
         self.mpth_mod = mpth_mod
         # sys.stdout.write("DEBUG import_path: %s, module: %s\n"%(self.mpth_mod, self.fpth_mod))
         if self.modulefilter.accept_module(self.fpth_mod):
             if self.dbg:
-                dbg_import("accept_module:`%s`"%self.fpth_mod)
+                dbg_import("accepted module:`%s`"%self.fpth_mod)
             return self
 
     def load_module(self, fullname):
@@ -258,18 +282,35 @@ class LangletImporter(object):
         :param fullname: fully qualified name e.g. 'spam.ham'
         '''
         mod = self.fpth_mod
+        # compile module if given path is source path
         if self.loader.is_source(mod):
             if self.dbg:
-                dbg_import("-"*(len(mod)+30))
+                dbg_import("-"*(len(mod)+20))
                 dbg_import("compile source: `%s`"%mod)
-                dbg_import("-"*(len(mod)+30))
+                dbg_import("-"*(len(mod)+20))
             self.langlet.compile_file(mod)
             compiled_module_path = mod.stripext()+self.langlet.config.compiled_ext
         else:
             compiled_module_path = mod
-        if self.dbg:
-            dbg_import("load compiled: `%s`\n"%compiled_module_path)
-        return self.langlet.compiler.load_compiled(fullname, compiled_module_path)
+
+        # Load compiled module. Check if module M has been passed as python <langlet>.py M.ext .
+        # If yes, load M as __main__
+        _dir = self.fpth_mod.dirname()
+        if _dir not in sys.path:
+            sys.path.append(_dir)
+        if self.modulefilter.is_mainmodule(self.fpth_mod):
+            if self.dbg:
+                dbg_import("load main module: `%s`\n"%self.fpth_mod)
+            compiled = self.langlet.compiler.load_compiled("__main__", compiled_module_path)
+        else:
+            if self.dbg:
+                dbg_import("load compiled: `%s` at `%s`\n"%(fullname, compiled_module_path))
+            compiled = self.langlet.compiler.load_compiled(fullname, compiled_module_path)
+        if self.langlet.config.remove_compiled_after_exec:
+            if self.dbg:
+                dbg_import("load compiled: removed `%s`\n"%compiled_module_path)
+            compiled_module_path.remove()
+        return compiled
 
     def import_module(self, fullname):
         if self.find_module(fullname):

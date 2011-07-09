@@ -1,5 +1,4 @@
 import langscape.util.unittest as unittest
-from langscape.csttools.cstrepr import pprint
 
 class Test_cstrep(unittest.TestCase):
     def setUp(self):
@@ -8,7 +7,7 @@ class Test_cstrep(unittest.TestCase):
 
     def test_pprint_simple(self):
         cst = self.python.parse("1+2\n")
-        #pprint(self.python, cst)
+        self.python.pprint(cst)
 
     def test_pprint_simple2(self):
         cst = self.python.parse("1+3\n")

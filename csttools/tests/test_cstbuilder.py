@@ -1,6 +1,5 @@
 import langscape.util.unittest as unittest
 import langscape.csttools.cstbuilder
-from langscape.csttools.cstrepr import pprint
 from langscape.csttools.cstsearch import find_node, find_all
 from langscape.csttools.cstbuilder import CSTBuilder
 

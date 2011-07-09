@@ -29,7 +29,7 @@ Date:    9 Mar 2007
 
 from __future__ import generators
 
-import sys, warnings, os, fnmatch, glob, shutil, codecs, md5
+import sys, warnings, os, fnmatch, glob, shutil, codecs, hashlib
 
 __version__ = '2.2'
 __all__ = ['path']
@@ -356,7 +356,7 @@ class path(_base):
 
         return [p for p in self.listdir(pattern) if p.isfile()]
 
-    def walk(self, pattern=None, errors='strict'):
+    def walk(self, pattern=lambda f:True, errors='strict'):
         """ D.walk() -> iterator over files and subdirs, recursively.
 
         The iterator yields path objects naming each child item of
@@ -389,7 +389,7 @@ class path(_base):
                 raise
 
         for child in childList:
-            if pattern is None or child.fnmatch(pattern):
+            if pattern is None or (child.fnmatch(pattern) if isinstance(pattern, str) else pattern(child)):
                 yield child
             try:
                 isdir = child.isdir()
@@ -406,8 +406,9 @@ class path(_base):
                     raise
 
             if isdir:
-                for item in child.walk(pattern, errors):
-                    yield item
+               if pattern is None or (child.fnmatch(pattern) if isinstance(pattern, str) else pattern(child)):
+                    for item in child.walk(pattern, errors):
+                        yield item
 
     def walkdirs(self, pattern=None, errors='strict'):
         """ D.walkdirs() -> iterator over subdirs, recursively.

@@ -12,122 +12,92 @@
 from langscape.csttools.cstutil import*
 import string
 
-
-def to_text(node_id, failure_text = True):
-    '''
-    Returns textual representation of a node id regardless of the langlet.
-    '''
-    from langscape.base.langlet import langlet_table
-    res = langlet_table.get_node_name(node_id, "parse")
-    if failure_text:
-        return res
-    else:
-        if res and res.startswith("?("):
-            return ""
-        else:
-            return res
-
-def shave(text):
-    '''
-    If we have a text of following shape::
-
-        |   foo
-        |     bar
-        |  baz
-
-    it will be dedented:
-
-        | foo
-        |   bar
-        |baz
-    '''
-    res = []
-    lines = text.split("\n")
-    #print "T-IN", lines
-    n = 1000
-    for line in lines:
-        k = len(line)
-        line = line.lstrip()
-        if not line:
-            res.append((0, ''))
-        else:
-            res.append((k-len(line), line.rstrip()))
-            n = min(n, k-len(line))
-    out = [" "*(k-n)+line for (k, line) in res]
-    #print "T-OUT", out
-    return out
-
-def prepare_source(text):
-    return "\n".join(shave(text)).lstrip()
-
 def indent_source(source, k = 4):
     K = " "*k
     sep = "\n"+K
     return K+sep.join(source.split("\n"))
 
-def display_node(langlet_obj, node, mark = [], stop = False, indent = 0):
-    INDENT = 2
-    langlet_id, _ = divmod(langlet_obj.langlet_id, LANGLET_ID_OFFSET)
+class CSTDisplay(object):
+    def __init__(self, langlet, *args, **kwd):
+        self.langlet       = langlet
+        self.langlet_id, _ = divmod(langlet.langlet_id, LANGLET_ID_OFFSET)
 
-    def toText(node_id):
-        llid, rest = divmod(node_id, LANGLET_ID_OFFSET)
-        if is_symbol(rest):
-            if llid!=langlet_id:
-                rest = str(rest)+" *"
-            name = to_text(node_id, False)
-            if name:
-                return name+"  -- NT`%d.%s"%(llid, rest)
-            return langlet_obj.get_node_name(node_id)+"  -- NT`%s"%(rest,)
+class CSTTextualDisplay(CSTDisplay):
+    def __init__(self, langlet, *args, **kwd):
+        super(CSTTextualDisplay, self).__init__(langlet, *args, **kwd)
+        self.INDENT = kwd.get("indent", 2)
+        self.marked = {}
+
+    def nid_to_text(self, nid):
+        llid, S = divmod(nid, LANGLET_ID_OFFSET)
+        name = self.langlet.get_node_name(nid)
+        if is_symbol(nid):
+            return name+"  -- NT`%d.%d\n"%(llid, S)
         else:
-            if llid!=langlet_id:
-                rest = str(rest)+" *"
-            name = to_text(node_id, False)
-            if name:
-                return name+"  -- T`%d.%s"%(llid, rest)
-            return langlet_obj.get_node_name(node_id)+"  -- T`%s"%(rest,)
+            return name+"  -- T`%d.%d\n"%(llid, S)
 
-    def node2text(node, indent = 0):
-        if not node:
-            return " "*(indent+INDENT)+str(node)+"  <----------    ???    <---------  \n\n"
+    def is_marked(self, nid, mark):
+        marked = self.marked.get(nid)
+        if marked is None:
+            if nid in mark or self.langlet.get_node_name(nid) in mark:
+                self.marked[nid] = True
+                return True
+            else:
+                self.marked[nid] = False
+                return False
+        return marked
 
-        nid = node[0]%LANGLET_ID_OFFSET
-        if node[0] in mark or langlet_obj.get_node_name(node[0]) in mark:
-            s = " "*indent+toText(node[0])+"       <-------  \n"
-            if stop == True:
-                s+=" "*(indent+INDENT)+".... \n\n"
-                return s
+    def wrap_whitespace(self, S):
+        if S in string.whitespace:
+            return ("' '"   if S == ' '  else
+                    "'\\n'" if S == '\n' else
+                    "'\\t'" if S == '\t' else
+                    "'\\r'" if S == '\r' else
+                    "'\\'"  if S == '\\' else
+                    "''")
+        return "'"+S+"'"
+
+
+    def node_to_text(self, node, indent = 0, depth = 10000, mark = ()):
+        if node is None:
+            return " "*(indent+self.INDENT)+"(None)  <----------    ???    <---------  \n\n"
+        nid = node[0]
+        nid_text = self.nid_to_text(nid)
+        if self.is_marked(nid, mark):
+            s = " "*indent+nid_text+"       <-------  \n"
         else:
-            if hasattr(node, "__message__"):
-                msg = node.__message__()
+            col = node[-1]
+            if isinstance(col, tuple):
+                line = node[-2]
+                s = " "*indent+nid_text.rstrip()+" at (L`%s, C`%s)\n"%(line, col)
             else:
-                msg = ""
-            ln = node[-1]
-            if isinstance(ln, int):
-                s = " "*indent+toText(node[0])+"     L`%s     %s"%((node[-1]),msg)+"\n"
-            else:
-                s = " "*indent+toText(node[0])+"   %s\n"%msg
+                s = " "*indent+nid_text
         for item in node[1:]:
             if isinstance(item, list):
-                s+=node2text(item, indent+INDENT)
-            elif isinstance(item, str):
-                if item in string.whitespace:
-                    k = ("' '"   if item == ' '  else
-                         "'\\n'" if item == '\n' else
-                         "'\\t'" if item == '\t' else
-                         "'\\r'" if item == '\r' else
-                         "'\\'"  if item == '\\' else
-                         "''")
+                if depth > 0:
+                    s+=self.node_to_text(item, indent = indent+self.INDENT, depth = depth-1, mark = mark)
+                elif depth == 0:
+                    # use flat = 2 to indicate that no further nesting shall be applied
+                    s+=self.node_to_text(item, indent = indent+self.INDENT, depth = -1, mark = mark)
                 else:
-                    k = item
-                s+=" "*(indent+INDENT)+k+"\n"
+                    pass
+            elif isinstance(item, str):
+                s+=" "*(indent+self.INDENT)+self.wrap_whitespace(item)+"\n"
         if indent == 0:
             return "\n"+s+"\n"
         else:
             return s
-    return node2text(node, indent = indent)
 
-def pprint(langlet_obj, node, mark = [], stop = True, indent = 0):
-    print display_node(langlet_obj, node, mark = mark, stop = stop, indent = indent),
+    def pformat(self, node, depth = 10000, mark = ()):
+        return self.node_to_text(node, indent = 0, depth = depth, mark = mark)
 
+    def pprint(self, node, depth = 10000, mark = (), line = -1):
+        #if line:
+        print self.pformat(node, depth = depth, mark = mark)
 
-
+if __name__ == '__main__':
+    import langscape
+    langlet = langscape.load_langlet("python")
+    cst = langlet.parse("1+1")
+    import pprint
+    langlet.pprint(cst, depth=100)

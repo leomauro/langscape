@@ -1,4 +1,3 @@
-from langscape.util import psyco_optimized
 from langscape.ls_const import*
 
 #####
@@ -6,16 +5,12 @@ from langscape.ls_const import*
 # list object used to represent CST nodes. Special list attributes are required
 # for cst transformations.
 class cstnode(list):
-
     def __init__(self, lst=[]):
         list.__init__(self, lst)
         self.msg = ""
         self.transformable = False
         self.handler  = None
         self.prepared = False
-
-    def __message__(self):
-        return self.msg
 
 
 # Used to add introns to tokens
@@ -24,11 +19,18 @@ class csttoken(cstnode):
         super(csttoken, self).__init__(lst)
         self.intron = []
 
+class tokenstring(str):
+    def __new__(cls, s, ext = ''):
+        obj = str.__new__(cls, s)
+        obj.ext = ext
+        return obj
+
 def is_token(nid):
     try:
         return nid%LANGLET_ID_OFFSET<SYMBOL_OFFSET
     except TypeError:
         return False
+
 
 def is_lexer_token(nid):
     try:
@@ -42,6 +44,7 @@ def is_keyword(nid):
         return KEYWORD_OFFSET<=n<SYMBOL_OFFSET
     except TypeError:
         return False
+
 
 def is_symbol(nid):
     try:
@@ -139,7 +142,8 @@ def replace_all_nodes(old_node, new_node, contains = None):
     @param in_nid: node id of the target node of replacement.
     @param node: substitution.
     '''
-    nid = node[0]
+    from langscape.csttools.cstsearch import find_node, find_all
+    nid = new_node[0]
     for node in find_all(old_node, nid):
         if contains:
             if find_node(node, contains):

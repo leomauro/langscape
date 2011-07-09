@@ -26,7 +26,7 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         if nd:
             sub = nd[1].split(".")
             T = self.fn.Tuple(*sub)
-            return self.fn.atom('(', self.fn.testlist_gexp(self.fn.CallFunc("ip.IPv4", [T])),')')
+            return self.fn.atom('(', self.fn.testlist_comp(self.fn.CallFunc("ip.IPv4", [T])),')')
 
     @transform
     def thunk_stmt(self, node):
@@ -49,8 +49,8 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
             if not ( is_node(a1, self.token.NAME) and \
                      is_node(a2, self.token.NAME)):
                 raise SyntaxError("thunk_stmt must have the form:  NAME = NAME ':' SUITE")
-            Name = find_node(a1, self.token.NAME, depth = 1)
-            Func = find_node(a2, self.token.NAME, depth = 1)
+            Name = find_node(a1, self.token.NAME,depth = 1)
+            Func = find_node(a2, self.token.NAME,depth = 1)
             if Name is None or Func is None:
                 raise SyntaxError("thunk_stmt must have the form:  NAME = NAME ':' SUITE")
         else:
@@ -83,7 +83,7 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         #
         #
 
-        if not find_node(node, self.symbol.as_name, depth = 1):
+        if not find_node(node, self.symbol.as_name,depth = 1):
             return
 
         __d = "__d_"+str(random.randrange(100000))
@@ -131,8 +131,8 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         # derived from grammar rules as well as CST interpolation
         SELECT  = "SELECT_"+str(random.randrange(100000))
         _test   = node[2]
-        _case   = find_node(node, self.symbol.case_stmt,depth = 1)
-        _else   = find_node(node, self.symbol.suite,depth = 1)
+        _case   = find_node(node, self.symbol.case_stmt, depth = 1)
+        _else   = find_node(node, self.symbol.suite, depth = 1)
 
         _cond   = self.fn.power("isChainlet", self.fn.trailer("(", _test, ")"))
         _select = self.fn.testlist(SELECT)
@@ -156,8 +156,8 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
 
     def _handle_case_stmt(self, node, _select, _else_suite = None):
         "case_stmt: 'case' expr ':' suite ('case' expr ':' suite)*"
-        _tests   = map(self.fn.test, find_all(node, self.symbol.expr, depth = 1))
-        _suites  = find_all(node, self.symbol.suite, depth = 1)
+        _tests   = map(self.fn.test, find_all(node, self.symbol.expr,depth = 1))
+        _suites  = find_all(node, self.symbol.suite,depth = 1)
         _select  = find_node(_select, self.symbol.expr)
         _conds   = [self.fn.comparison(find_node(test, self.symbol.expr),"==",_select) for test in _tests]
         if_input = sum(map(list, zip(_conds,_suites)),[])

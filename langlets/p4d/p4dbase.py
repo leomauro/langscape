@@ -2,7 +2,6 @@
 import sys
 import p4dutils
 import xmlutils
-import htmlutils.BeautifulSoup as BeautifulSoup
 from parsedef.parse_nfa import keywords
 
 __all__ = ["P4D", "P4DNode", "P4D", "P4DList", "P4DName", "P4DNamespace", "P4DAccessError", "P4DContentList"]
@@ -233,11 +232,12 @@ class P4DNamespace(object):
     def __str__(self):
         return self.uri
 
+
+
 class P4D(object):
     '''
     P4D objects are lazy wrappers around nested lists that store
     XML or P4D data.
-
     '''
     __slots__ = ['_tree', '_parent', '_content', '_children', '_idx', '_parent', 'tag', '_attrs', '_name']
     parser   = None
@@ -331,8 +331,8 @@ class P4D(object):
         self.update()
 
     def update(self):
-        import evalutils
-        evalutils.mapeval(self._tree, globals(), locals())
+        import p4deval
+        p4deval.mapeval(self._tree, globals(), locals())
 
     def comment(self):
         '''
@@ -566,6 +566,9 @@ class P4D(object):
         if isinstance(self._attrs, P4DAttributes):
             return self._attrs[key]
 
+    def __iter__(self):
+        return self
+
     def next(self):
         try:
             self._idx+=1
@@ -579,8 +582,6 @@ class P4D(object):
         '''
         return self._tree
 
-    def __iter__(self):
-        return self
 
     def __repr__(self):
         return 'P4D<%s>' % self.tag

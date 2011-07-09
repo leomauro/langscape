@@ -1,5 +1,6 @@
 ###############  langlet transformer definition ##################
 
+import pprint
 from langlet_config import parent_langlet
 from langscape.base.loader import BaseClass
 from langscape.csttools.cstutil import*
@@ -26,9 +27,9 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         rule_name = find_node(node, self.token.NAME)[1]
         rhs = self.rhs(find_node(node, self.symbol.rhs))
         if isinstance(rhs, SequenceRule):
-            rhs.lst.append(ConstRule([(None, "-")]))
+            rhs.lst.append(ConstRule([(FIN, FEX)]))
         else:
-            rhs = SequenceRule([rhs, ConstRule([(None, "-")])])
+            rhs = SequenceRule([rhs, ConstRule([(FIN, FEX)])])
         self.rules[rule_name] = (Rule([(rule_name, 0), rhs]), self.langlet.unparse(node))
 
     def rhs(self, node):

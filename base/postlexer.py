@@ -1,8 +1,7 @@
 import sys
 import pprint
 
-from langscape.ls_const import SYMBOL_OFFSET
-from langscape.trail.nfadef import INTRON_NID
+from langscape.ls_const import SYMBOL_OFFSET, INTRON_NID
 from langscape.csttools.cstutil import csttoken
 
 __all__ = ["postlex", "Postlexer"]
@@ -93,6 +92,8 @@ class Postlexer(object):
     def INTRON(self, pos, tok):
         intron = tok[:]
         intron[0] = INTRON_NID + SYMBOL_OFFSET
+        # the intron is added to the token stream but skipped
+        # by the NFAParser.
         self.add_token(intron)
 
 

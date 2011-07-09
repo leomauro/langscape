@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-import EasyExtend.util.unittest as unittest
+import langscape.util.unittest as unittest
 from copy import copy
 
 
@@ -136,7 +136,6 @@ class TestHex(unittest.TestCase):
             y: 0x55
         self.assertEqual(b.hex(), "09010289A755")
 
-
 class TestByteletUpdate(unittest.TestCase):
     def test_change_value(self):
         a = bl:a:
@@ -216,7 +215,25 @@ class TestCloneBytelet(unittest.TestCase):
         cloned = a.clone()
         self.assertEqual(a.p4dstr(), cloned.p4dstr())
         self.assertEqual(a.hex(), cloned.hex())
-        print a.hex()
+
+
+class TestBit(unittest.TestCase):
+    def test_set_bit(self):
+        elm bl:b:
+            a1(w=0b1):1
+            a2(w=0b1):1
+            a3(w=0b1):1
+            a4(w=0b1):1
+            a5(w=0b1):1
+            a6(w=0b1):1
+            a7(w=0b1):1
+            a8(w=0b1):1
+
+        self.assertEqual(b.hex(), "FF")
+        b.a1 = 0
+        self.assertEqual(b.hex(), "7F")
+        b.a8 = 0
+        self.assertEqual(b.hex(), "7E")
 
 
 class TestByteletSchemaStd(unittest.TestCase):
@@ -259,11 +276,11 @@ class TestByteletSchemaStd(unittest.TestCase):
         self.assertEqual(bl.Val.F1.hex(), "F1")
         self.assertEqual(bl.Val.F2.hex(), "F2 AA")
         hexcode = "07 05 08 03 F1 F2"
-        self.assertRaises(ParserError, function.parse, hexcode)
+        self.assertRaises(ByteletError, function.parse, hexcode)
         hexcode = "07 05 08 03 F1 F2 AA 05"
-        self.assertRaises(ParserError, function.parse, hexcode)
+        self.assertRaises(ByteletError, function.parse, hexcode)
         hexcode = "07 05 08 03 F1"
-        self.assertRaises(ParserError, function.parse, hexcode)
+        self.assertRaises(ByteletError, function.parse, hexcode)
 
     def test_parse_with_hexmatch(self):
         elm bl-schema:function:
@@ -421,7 +438,7 @@ class TestByteletBitSchema(unittest.TestCase):
             F3: 0b5
 
         self.assertEqual(isinstance(bmp, ByteletSchema), True)
-        self.assertRaises(ParserError, bmp.parse, 0x45 0x67)
+        self.assertRaises(ByteletError, bmp.parse, 0x45 0x67)
 
     def test_bitarray_overflow(self):
         elm bl-schema:bmp:
@@ -429,7 +446,7 @@ class TestByteletBitSchema(unittest.TestCase):
             F2: 0b4
             F3: 0b12
         self.assertEqual(isinstance(bmp, ByteletSchema), True)
-        self.assertRaises(ParserError, bmp.parse, 0x45 0x67)
+        self.assertRaises(ByteletError, bmp.parse, 0x45 0x67)
 
     def test_value_does_not_fit(self):
         elm bl-schema:bmp:
@@ -484,6 +501,8 @@ class TestByteletBitSchema(unittest.TestCase):
         #print ipv4_msg.parse(msg.hex()).p4dstr()
 
 
+
+unittest.run_unittest(TestBit)
 unittest.run_unittest(TestBytelet)
 unittest.run_unittest(TestFlow)
 unittest.run_unittest(TestLEN)

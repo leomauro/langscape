@@ -13,16 +13,10 @@ This module defines a generic hexadecimal object.
 '''
 import binascii
 import re
-from Enum import*
 
 class NotConvertibleException(Exception):pass
 
 class HexOrBin(object):pass
-
-class PAD_MODE(Enum):
-    PAD_ISO_1   = 0
-    PAD_ISO_2   = 1
-
 
 def ssplit(s,len_part):
     n = len(s)-len(s)%len_part
@@ -216,6 +210,12 @@ class Hex(HexOrBin):
 
     def __call__(self):
         return self.buffer()
+
+    def clone(self):
+        h = Hex()
+        h.format = self.format
+        h.bytes = self.bytes[:]
+        return h
 
     def ascii(self):
         '''
@@ -512,54 +512,35 @@ class Hex(HexOrBin):
         return res
 
     def concat(self, hNbr, binoffset = 0, bits = 0):
-        def fill(hNbr):
-            if bits:
-                k,r = divmod(bits,8)
-                if hNbr.bytes:
-                    h = Hex()
-                    h.bytes = hNbr.bytes[:]
-                    if r:
-                        if len(h)<=k:
-                            h.bytes = [0]*(k+1-len(h))+h.bytes
-                    elif len(hNbr)<k:
-                        h.bytes = [0]*(k-len(h))+h.bytes
-                    if h.bytes[0] == 0:
-                        h.bytes.insert(0,1)
-                        return True, h
-                    return False, h
-            return False, hNbr
-
-        drop_head, hNbr = fill(hNbr)
-        if binoffset == 0:
-            if bits == 0:
-                return 0, self // hNbr
-            else:
-                r = bits%8
-                if r:
-                    hx = hNbr<<(8-r)
-                else:
-                    hx = hNbr
-                if drop_head:
-                    hx.bytes = hx.bytes[1:]
-                return r, self // hx
-        else:
-            if bits:
-                r = bits%8
-                hx = Hex(hNbr.num()<<(8-binoffset-r))
-                if drop_head:
-                    if len(hx) == len(hNbr):
-                        hx.bytes = [0]+hx.bytes[1:]
-                    else:
-                        hx.bytes = hx.bytes[1:]
-                self[-1] = self[-1]|hx[0]
-                return (bits + binoffset)%8, self // hx[1:]
-            else:
-                hx = Hex(hNbr.num()<<(8-binoffset))
-                if len(hx) == len(hNbr):
-                    return binoffset, self//hx
-                else:
-                    self[-1] = self[-1]|hx[0]
-                    return binoffset, self//hx[1:]
+        if binoffset == bits == 0:
+            return 0, self//hNbr
+        k1 = 8 - binoffset
+        k2 = bits%8
+        if k1 == 8:
+            return k2, self//(hNbr<<(8-k2))
+        h_bits = len(hNbr)*8
+        has_leading_1 = False
+        if bits<=h_bits:
+            h = hNbr & (2**bits-1)
+        elif bits>h_bits:
+            d = 1+(bits - h_bits)/8
+            h = Hex()
+            h.bytes = [0]*d + hNbr.bytes[:]
+            h.bytes.insert(0,1) # this is for use of preserving leading nulls
+                                # in shifts
+            has_leading_1 = True
+        if k1>k2:
+            shift = (k1-k2)
+            h = h<<shift
+        elif k2>k1:
+            shift = (k2-k1)
+            h.bytes.append(0)
+            h = h>>shift
+        if has_leading_1:
+            del h.bytes[0]
+        hx = self.clone()
+        hx.bytes[-1] = h.bytes[0] | hx.bytes[-1]
+        return (binoffset+bits)%8, hx // h[1:]
 
 
     def rest(self, byteoffset, binoffset):
@@ -649,6 +630,84 @@ class Bin(int):
         n = self.num()
         return "0b%d"%n
 
+def test_concat():
+    h = Hex(0x14)
+    offset, h = h.concat(Hex(7),0,3)
+    assert offset == 3
+    assert h == Hex("14 E0")
+    offset, h = h.concat(Hex(1),3,1)
+    assert offset == 4
+    assert h == Hex("14 F0")
+    offset, h = h.concat(Hex(10),4,4)
+    assert offset == 0
+    assert h == Hex("14 FA")
+    offset, h = h.concat(Hex(10),0,4)
+    assert offset == 4
+    assert h == Hex("14 FA A0")
+
+    h = Hex(0x7E)
+    offset, h = h.concat(Hex(0x00),7,1)
+    assert offset == 0, offset
+    assert h == Hex(0x7E)
+
+    h = Hex(0xF0)
+    offset, h = h.concat(Hex(0xAAA), 4, 12)
+    assert offset == 0, offset
+    assert h == Hex("FA AA")
+
+    h = Hex(0xFC)
+    offset, h = h.concat(Hex(0xF), 6, 4)
+    assert offset == 2, offset
+    assert h == Hex("FF C0"), h
+
+    h = Hex(0xC0)
+    offset, h = h.concat(Hex(0xF), 2, 4)
+    assert offset == 6, offset
+    assert h == Hex("FC"), h
+
+    h = Hex(0xC0)
+    offset, h = h.concat(Hex(0xFF), 2, 4)
+    assert offset == 6, offset
+    assert h == Hex("FC"), h
+
+    h = Hex(0xC0)
+    offset, h = h.concat(Hex(0xFF), 2, 6)
+    assert offset == 0, offset
+    assert h == Hex("FF"), h
+
+    h = Hex(0xC0)
+    offset, h = h.concat(Hex(0xFF), 2, 8)
+    assert offset == 2, offset
+    assert h == Hex("FF C0"), h
+
+    h = Hex()
+    offset, h = h.concat(Hex(0), 0, 1)
+    assert offset == 1
+    assert h == Hex(0)
+
+    offset, h = h.concat(Hex(1), offset, 1)
+    assert offset == 2
+    assert h == Hex(0x40)
+
+    h = Hex(0xF0)
+    offset, h = h.concat(Hex(0xFF), 4, 12)
+    assert offset == 0
+    assert h == Hex("F0 FF"), h
+
+    h = Hex()
+    offset, h = h.concat(Hex(0x0A), 0, 4)
+    assert offset == 4
+    assert h == Hex(0xA0)
+    offset, h = h.concat(Hex(0x0A), 4, 16)
+    assert offset == 4
+    assert h == Hex("A0 00 A0"), h
+    offset, h = h.concat(Hex(0x04), 4, 4)
+    assert offset == 0
+    assert h == Hex("A0 00 A4"), h
+
+
+
+
 
 if __name__=='__main__':
     h = Hex("FFFFFF")
@@ -656,34 +715,24 @@ if __name__=='__main__':
     h = Hex(787)
     h++h
     h = Hex(0x403)
-    print h.binary()
+    #print h.binary()
     Hex("0x00")
     Hex("{\}}")
     h = Hex("00 {der kaiser franz-josef}")
-    for item in Hex("01020304050607").split(3):
-        print item
+    #for item in Hex("01020304050607").split(3):
+    #    print item
 
     h = Hex(0x02)
     while h:
         h-=1
         if h==-10:
             raise TypeError
-    print Hex("3F007F20").spath()
-    print Hex("A0A40000023F00").shuffle()
-    print Hex("00 00 00 00 07 00 A0 00 A4 00 00 00 00 00 02 00 3F 00 00 00 3E 00").unshuffle()
+    #print Hex("3F007F20").spath()
+    #print Hex("A0A40000023F00").shuffle()
+    #print Hex("00 00 00 00 07 00 A0 00 A4 00 00 00 00 00 02 00 3F 00 00 00 3E 00").unshuffle()
     h = Hex("45 76 89")
-    print "section", h.section(1,4,12, bit = True)
+    #print "section", h.section(1,4,12, bit = True)
 
-    h = Hex(0x14)
-    offset, h = h.concat(Hex(7),0,3)
-    print offset, "CAT", h
-    offset, h = h.concat(Hex(1),3,1)
-    print offset, "CAT", h
-    offset, h = h.concat(Hex(10),4,0)
-    print offset, "CAT", h
-    offset, h = h.concat(Hex(10),4,4)
-    print offset, "CAT", h
-    print Hex("0x00 0x00")
-
-
+    #assert h == Hex(0x7E), h
+    test_concat()
 

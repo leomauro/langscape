@@ -9,6 +9,7 @@ import os
 import struct
 import marshal
 import parser
+import dis
 
 MAGIC = imp.get_magic()
 
@@ -21,6 +22,7 @@ class Compiler(object):
         '''
         Save compiled code in .pyc file.
         '''
+        filename = filename.splitext()[0] + self.langlet.config.compiled_ext
         with open(filename, "wb") as f:
             mtime = os.path.getmtime(filename)
             mtime = struct.pack('<i', mtime)
@@ -28,17 +30,18 @@ class Compiler(object):
             marshal.dump(code, f)
 
     def compile(self, cst, filename = "<input>"):
-        cst = self.python.map_to_python(cst, self.langlet)
+        P = self.python.map_to_python(cst, self.langlet)
         try:
-            ast = parser.tuple2ast(cst)
+            ast = parser.tuple2ast(P)
             code = ast.compile(filename)
+            self.python._code[filename] = ('cst', cst)
         except parser.ParserError, e:
             source = self.langlet.unparse(cst)
             code = compile(source, filename, "exec")
+            self.python._code[filename] = ('src', source)
         if filename != "<input>":
             self.serialize(code, filename)
         return code
-
 
     def compile_source(self, *args):
         return compile(*args)

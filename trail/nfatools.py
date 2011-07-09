@@ -4,11 +4,12 @@
 ##
 
 import langscape
-from langscape.trail.nfadef import*
+from langscape.csttools.cstutil import*
 from langscape.trail.nfatracer import*
 from langscape.util import flatten_list
 import pprint
 import copy
+import random
 
 class NFAInterpreter(object):
     '''
@@ -52,7 +53,7 @@ def pprint_nfa(nfa, langlet):
                          langlet.get_node_name(label[2]))
         new_F = []
         for label in follow:
-            if type(label[0]) == str or label[0] is None:
+            if type(label[0]) == str or label[0] is FIN:
                 new_L = label[:-1]+(langlet.get_node_name(label[-1]),)
             elif len(label) == 4:
                 new_L = (langlet.get_node_name(label[0]),
@@ -72,7 +73,7 @@ def compute_follow_states(transitions, state):
     follow = []
     states = transitions[state]
     for s in states:
-        if s[1] in CONTROL:
+        if s[1] in TRAIL_CONTROL:
             follow+=compute_follow_states(transitions, s)
         else:
             follow.append(s)
@@ -100,7 +101,7 @@ def compute_branch_points(nfa):
     branch_points = set()
     trans = nfa[2]
     for S in trans:
-        if S[1] not in CONTROL and S[0]!=None:
+        if S[1] not in TRAIL_CONTROL and S[0]!=FIN:
             follow = compute_follow_states(trans, S)
             nids = {}
             for F in follow:
@@ -152,7 +153,7 @@ def compute_subnfa(nfa, state):
     follow    = set(trans[state])
     while follow:
         S = follow.pop()
-        if S[0] is None:
+        if S[0] is FIN:
             continue
         F = trans[S]
         sub_trans[S] = F
@@ -164,7 +165,7 @@ def compute_subnfa(nfa, state):
 
 def compute_fibration(nfa):
     '''
-    Let Pre(EXIT) the set of predecessors of the EXIT symbol (None, '-', nid)
+    Let Pre(EXIT) the set of predecessors of the EXIT symbol (FIN, FEX, nid)
     for some NFA. For each p in Pre(EXIT) we compute a sub NFA p(NFA)
     '''
     start   = nfa[1]
@@ -176,7 +177,7 @@ def compute_fibration(nfa):
         visited.add(state)
         S_trace = []
         for F in trans[state]:
-            if F[0] is None:
+            if F[0] is FIN:
                 S_trace.append([state, F])
             elif F in traces:
                 for T in traces[F]:
@@ -203,7 +204,7 @@ def span_traces(nfas, nonterminals):
             tree = [state]
             selection = rt.select(state)
             for s in selection:
-                if s in visited or s[0] is None:
+                if s in visited or s[0] is FIN:
                     continue
                 visited.add(s)
                 symbols.add(s[0])
@@ -234,7 +235,7 @@ def compute_constants(nfas, lexer_token, keywords):
             selection = tracer.select(s)
             if len(selection)>1:
                 break
-            if None in selection:
+            if FIN in selection:
                 constants[r] = ''.join(l)
                 break
             else:
@@ -273,7 +274,126 @@ def test_branchpoints():
     print len(nfa[2])
     return compute_branch_points(nfa)
 
+def compute_subtraces(K, k, S, trace, trans):
+    '''
+    Computes complete traces of a given length.
+
+    :param K: The prescribed length of a trace.
+    :param k: The current length of a trace ( used by recursive calls ).
+    :param trace: the current trace.
+    :param trans: the {state:[follow-states]} dictionary which characterizes one NFA.
+    '''
+    traces = []
+    follow = trans[S]
+    for F in follow:
+        if F[0] is FIN:
+            # termination condition fulfilled?
+            if k == K:
+                traces.append(trace+[F])
+        else:
+            m = trace.count(F)
+            # impossible to terminate trace under this condition
+            if m == K:
+                continue
+            else:
+                traces+=compute_subtraces(K, max(k,m+1), F, trace+[F], trans)
+    return traces
+
+def compute_span_subtraces(S, k, trace, trans):
+    '''
+    Computes complete traces of a given length.
+
+    :param trace: the current trace.
+    :param trans: the {state:[follow-states]} dictionary which characterizes one NFA.
+    '''
+    traces = []
+    follow = trans[S]
+    for F in follow:
+        if F[0] is FIN:
+            # termination condition fulfilled?
+            traces.append(trace+[F])
+        else:
+            m = trace.count(F)
+            # impossible to terminate trace under this condition
+            if m > k:
+                continue
+            else:
+                traces+=compute_span_subtraces(F, k, trace+[F], trans)
+    return traces
+
+def compute_tr(K, nfa):
+    '''
+    Computes Tr(K,nfa)
+    '''
+    trans = nfa[2]
+    start = nfa[1]
+    return compute_subtraces(K, 0, start, [], trans)
+
+
+def compute_all_tr(K, nfa):
+    '''
+    Computes Tr(1, nfa) \/ Tr(2, nfa) \/ ... \/ Tr(k, nfa)
+    '''
+    traces = []
+    for k in range(1, K+1):
+        T = compute_tr(k, nfa)
+        if T:
+            traces+=T
+        else:
+            break
+    return traces
+
+def compute_tr_with_target(start, target, nfa, visited = None):
+    _, _, trans = nfa
+    follow = trans[start]
+    if visited is None:
+        visited = set()
+    visited.add(start)
+    if type(target) == int:
+        for S in trans:
+            if S[0] == target:
+                target = S
+                break
+    for F in follow:
+        if F == target:
+            return [start, target]
+        elif F[0] is not FIN and F not in visited:
+            T = compute_tr_with_target(F, target, nfa, visited)
+            if T:
+                return [start]+T
+    return []
+
+def compute_state_traces(nfa):
+    _, start, trans = nfa
+    states = set()
+    traces = []
+    for S in trans:
+        if S == start:
+            continue
+        for tr in traces:
+            if S in tr:
+                break
+        else:
+            T1 = compute_tr_with_target(start, S, nfa)
+            T2 = compute_tr_with_target(S, (FIN, FEX, start[0]), nfa)
+            T = T1[1:]+T2[1:-1]
+            traces.append(T)
+    return traces
+
+def compute_span_traces(nfa):
+    _, start, trans = nfa
+    return compute_span_subtraces(start, 1, [], trans)
+
+def test_span():
+    python = langscape.load_langlet("python")
+    nfa = python.parse_nfa.nfas[1016]
+    #pprint.pprint(nfa)
+    pprint.pprint(compute_span_traces(nfa))
+
+
 if __name__ == '__main__':
-    test_subnfa()
-    test_branchpoints()
-    test_fibration()
+    # test_subnfa()
+    # test_branchpoints()
+    # test_fibration()
+    test_span()
+

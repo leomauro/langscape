@@ -1,13 +1,15 @@
 import langscape
 import random
+import math
+
 from langscape.ls_const import*
 from langscape.sourcetools.sourcegen import GPSourceGen
 from langscape.sourcetools.tokgen import TokenGenerator
-from lexdef import lex_symbol
 from langscape.trail.nfagen import NFAGenerator, GrammarError
 from langscape.base.langlet import BaseLanglet
 from langscape.base.grammar_gen import SymbolObject
-import math
+
+from lexdef import lex_symbol
 
 ls_grammar = langscape.load_langlet("ls_grammar")
 
@@ -43,9 +45,9 @@ class GrammarObject(object):
             self.nfagenerator.derive_properties()
             self.nfagenerator.expand_nfas()
 
-class GGen(GPSourceGen):
+class GPGGen(GPSourceGen):
     def __init__(self, *args):
-        super(GGen, self).__init__(*args)
+        super(GPGGen, self).__init__(*args)
         self.desired_rule_size = 0
         self.rule_cnt = 0
         self.rule_ids = []
@@ -136,7 +138,7 @@ class GGen(GPSourceGen):
         print "-------------------------------------------------------------------"
         print "\n".join([' '.join([g[1] for g in R1]).strip() for R1 in individual.rules])
 
-    def terminate(self):
+    def terminate(self, fit_val):
         return False # controlled by evolve main loop
 
     def mutate(self, individual):
@@ -165,8 +167,77 @@ class GGen(GPSourceGen):
             self.display_individual(go, 0)
             raise
 
+def random_rule(stoplen = 10):
+    # some rules to constrain 'interesting' cases
+    #
+    # 1. Avoid double parens (( ... )) or double square braces [[ ... ]]
+    # 2. Avoid use of STRING
+    # 3. Avoid sequences of NAME longer than 2 i.e. NAME NAME NAME
+    trace = []
+    ttracer = TokenTracer(self.langlet, start = ls_grammar.symbol.rhs)
+    STRING = ls_grammar.token.STRING
+    LPAR   = ls_grammar.token.LPAR
+    RPAR   = ls_grammar.token.RPAR
+    LSQB   = ls_grammar.token.LSQB
+    RSQB   = ls_grammar.token.RSQB
+
+    selection = ttracer.selectables()
+
+    while True:
+        if len(trace)>stoplen:
+            if None in selection:
+                return trace
+        n = len(selection)
+        visited = set()
+        while True:
+            k = random.randrange(n)
+            if k in visited:
+                continue
+            visited.add(k)
+            item = selection[k]
+            if len(visited) == n:
+                trace.append(item)
+                selection = ttracer.select(item)
+                break
+            if item == STRING:
+                continue
+            elif item == NAME:
+                if len(trace)>=2:
+                    if trace[-1] == trace[-2] == NAME:
+                        continue
+            elif item in (RSQB, RPAR):
+                if trace and trace[-1] == item:
+                    if item == RSQB:
+                        LEFT = LSQB
+                    else:
+                        LEFT = LPAR
+                    RIGHT = item
+                    m = len(trace)-2
+                    double = False
+                    level = -2
+                    while m:
+                        if trace[m] == RIGHT:
+                            level-=1
+                        elif trace[m] == LEFT:
+                            level+=1
+                        if level == 0:
+                            if trace[m+1] == LEFT:
+                                double = True
+                            break
+                    if double:
+                        continue
+            trace.append(item)
+            selection = ttracer.select(item)
+            break
+
+
+
+
+
+
+
 def test1():
-    ggen = GGen(ls_grammar)
+    ggen = GPGGen(ls_grammar)
     R1 = ggen.new_rule()
     R2 = ggen.new_rule()
     R3 = ggen.new_rule()
@@ -182,7 +253,10 @@ def test1():
     print ' '.join([g[1] for g in R1]).strip()
 
 if __name__ == '__main__':
-    ggen = GGen(ls_grammar)
+    '''
+    ggen = GPGGen(ls_grammar)
     ggen.desired_rule_size = 1000
-    ggen.evolve(size = 20, generations = 400)
+    ggen.evolve(size = 20, generations = 40)
+    '''
+    print random_rule(5)
 

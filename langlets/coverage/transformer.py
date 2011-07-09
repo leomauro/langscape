@@ -1,10 +1,10 @@
-###############  langlet transformer definition ##################
+############### langlet transformer definition ##################
 
 from langlet_config import parent_langlet
 from langscape.base.loader import BaseClass
-from langscape.csttools.cstutil import*
+from langscape.csttools.cstutil   import*
 from langscape.csttools.cstsearch import find_node, find_all, find_all_gen, find_token_gen, find_all_token
-from langscape.base.transformer import transform, transform_dbg, t_dbg
+from langscape.base.transformer   import transform, transform_dbg, t_dbg
 
 import langscape.langlets.coverage.monitor as monitor
 
@@ -22,15 +22,10 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
     '''
     Defines langlet specific CST transformations.
     '''
-    def set_main_module(self, main_module):
-        self._main_module = main_module
-        self.in_main_of_not_main = False
-
-    def set_module(self, module):
-        self._module = module
-        if self._module:
-            self.mon = monitor.Monitor()
-            self.mon.assign_sensors(self._module)
+    def set_module(self, module_descriptor):
+        self._module_descriptor = module_descriptor
+        self.mon = monitor.Monitor()
+        self.mon.assign_sensors(module_descriptor.fpth_mod_full)
 
     def get_line_info_begin(self, node):
         try:
@@ -73,17 +68,19 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
 
     @transform
     def if_stmt(self, node):
-        if self._module != self._main_module:
-            if self.is_main(node):
-                self.in_main_of_not_main = True
-        return node
+        # Set sensors in "if __name__ == '__main__':" statements
+        # which correspond to __main__ only. In all other cases the statement is unreachable
+        if self.is_main(node):
+            if self._module_descriptor.is_main:
+                for sub in node[1:]:
+                    self.run(sub)
+            else:
+                self.unmark_node(node)
 
     @transform
     @t_dbg("cv", cond = lambda node, **locals: locals.get("line",-1)>=0)
     def and_test(self, node, line = -1, idx = 0):
-        if self.in_main_of_not_main:
-            return
-        if find_node(node, self.keyword["and"], depth = 1):
+        if find_node(node, self.keyword["and"],depth = 1):
             _not_tests = find_all(node, self.symbol.not_test, depth=1)
             for sub in _not_tests:
                 if find_node(sub, self.symbol.test):
@@ -114,10 +111,8 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
 
     @transform
     def or_test(self, node, line = -1, idx = 0):
-        if self.in_main_of_not_main:
-            return
-        if find_node(node, self.keyword["or"], depth = 1):
-            and_tests = find_all(node, self.symbol.and_test, depth = 1)
+        if find_node(node, self.keyword["or"],depth = 1):
+            and_tests = find_all(node, self.symbol.and_test,depth = 1)
             for i, t in enumerate(and_tests):
                 self.run(t, line = 0, idx = idx)
             for sub in and_tests:
@@ -144,12 +139,10 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
 
 
     @transform
-    #@t_dbg("si")
+    # @t_dbg("si")
     def suite(self, node):
         # special case: no use of sensors in 'if __main__...' stmts of modules that are not __main__.
-        if self.in_main_of_not_main:
-            return
-        _stmts = find_all(node, self.symbol.stmt, depth = 1)
+        _stmts = find_all(node, self.symbol.stmt,depth = 1)
         _num = self.fn.Number(len(monitor.Monitor().stmt_sensors))
 
         # compile a call 'measure_stmt(_num)' into each suite
@@ -165,7 +158,7 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         if IDX:
             suite_begin, suite_end = self.get_line_info(node)
             monitor.StmtSensor(suite_begin, suite_end)
-            _small = find_node(node[i], self.symbol.small_stmt, depth = 3)
+            _small = find_node(node[i], self.symbol.small_stmt,depth = 3)
             if _small and self.fn.is_atomic(_small) and find_node(_small, self.token.STRING):
                 node.insert(IDX+2, _sensor_stmt)
             else:

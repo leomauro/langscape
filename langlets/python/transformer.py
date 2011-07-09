@@ -16,9 +16,9 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         if self.options.get("interactive"):  # global transformations for files
             return
 
-        for i, nd in enumerate(node[1:]):
-            if self._like_main_transform(nd, node, i+1):
-                break
+        # for i, nd in enumerate(node[1:]):
+        #     if self._like_main_transform(nd, node, i+1):
+        #         break
 
         for i,nd in enumerate(node[1:]):
             trans = self._import_langlet_trans(nd)

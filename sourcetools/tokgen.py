@@ -1,7 +1,7 @@
 import random
 import string
 from langscape.ls_const import*
-from langscape.trail.nfatracer import TokenTracer
+from langscape.trail.tokentracer import TokenTracer
 
 def random_letter():
     return string.letters[random.randrange(0,27)]
@@ -50,21 +50,21 @@ class TokenGenerator(object):
         S = []
         while True:
             n = len(selection)
-            if selection == [None]:
+            if selection == [FIN]:
                 return ''.join(S)
             if len(S)>20:
                 return self.gen_token_string(nid)
             while True:
                 m = random.randrange(0, n)
                 t = selection[m]
-                if t is None:
+                if t is FIN:
                     continue
                 try:
                     chars = list(self.lexer_terminal[t])
                 except KeyError:
                     return ''
                 if not chars:
-                    other_chars = reduce(lambda S, T: S.union(T), [self.lexer_terminal.get(r, set()) for r in selection if r!=t])
+                    other_chars = reduce(lambda S, T: S.union(T), [self.lexer_terminal.get(r, set()) for r in selection if r!=t], set())
                     while True:
                         c = random_printable()
                         if c == '\\':
@@ -79,7 +79,7 @@ class TokenGenerator(object):
                 break
 
             if len(S) >= self.stdlen:
-                if None in selection:
+                if FIN in selection:
                     if S[0] in ('"', "'"):
                         if len(S)>=4:
                             return ''.join(S)
@@ -91,12 +91,12 @@ class TokenGenerator(object):
 
 if __name__ == '__main__':
     import langscape
-    from langscape.trail.nfatracer import TokenTracer
+    from langscape.trail.tokentracer import TokenTracer
     python = langscape.load_langlet("python")
     tracer = TokenTracer(python, python.lex_symbol.Single3, "lex")
 
     tokgen = TokenGenerator(python)
-    for i in range(1000):
+    for i in range(100):
         s = tokgen.gen_token_string(python.lex_symbol.NAME)
         print s
         #print "NUM", "%-8s %s"%(s, eval(s))

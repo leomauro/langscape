@@ -1,30 +1,9 @@
-def more_recent(file_A, file_B):
-    import os
-    return list(os.stat(file_A))[-2]>=list(os.stat(file_B))[-2]
-
-
-def psyco_optimized(f):
+def split_list(L, n):
     '''
-    Decorator for Psyco optimized functions.
+    Splits list L into sublists of length n.
     '''
-    try:
-        import psyco
-        return psyco.proxy(f)
-    except ImportError:
-        return f
+    return [L[i:i+n] for i in range(len(L))[::n]]
 
-
-def abstractmethod(f):
-    '''
-    Used for Python 2.5 only.
-    '''
-    def call(*args, **kwd):
-        raise NotImplementedError
-    call.__name__ = f.__name__
-    call.__doc__ = f.__doc__
-    return call
-
-import __builtin__
 
 def flatten_list(lst):
     if not isinstance(lst, list) or len(lst)==1:
@@ -46,13 +25,13 @@ def flatten_list(lst):
 def flip(dct):
     '''
     If dct = {a1:b1, ..., an:bn} is a dictionary than flip(dct) = {b1:a1, ..., bn:an}
+
+    Note: flip fails when the values of the original dict are not hashable.
     '''
-    rdct = {}
     return dict((b,a) for (a,b) in dct.items())
 
 def get_encoding_str(encoding):
     return "# -*- coding: %s -*-\n"%encoding
-
 
 def get_traceback():
     import sys, traceback
@@ -70,5 +49,25 @@ def get_traceback():
     finally:
         tblist = tb = None
     return "".join(lst)
+
+
+def levenshtein(s1, s2):
+    '''
+    Computes Levenshtein distance between two strings or more generally between two
+    iterables supporting __len__() and __getitem__() like lists or tuples.
+    '''
+    l1 = len(s1)
+    l2 = len(s2)
+    matrix = [range(l1 + 1)] * (l2 + 1)
+    for zz in range(l2 + 1):
+        matrix[zz] = range(zz,zz + l1 + 1)
+    for zz in range(0,l2):
+        for sz in range(0,l1):
+            if s1[sz] == s2[zz]:
+                matrix[zz+1][sz+1] = min(matrix[zz+1][sz] + 1, matrix[zz][sz+1] + 1, matrix[zz][sz])
+            else:
+                matrix[zz+1][sz+1] = min(matrix[zz+1][sz] + 1, matrix[zz][sz+1] + 1, matrix[zz][sz] + 1)
+    return matrix[l2][l1]
+
 
 

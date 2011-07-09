@@ -2,18 +2,23 @@ import pprint
 import warnings
 import copy
 import sys
-
 import langscape
 import langscape.util
 import langscape.trail.nfatools as nfatools
 from langscape.csttools.cstutil import is_token, is_keyword
 from langscape.trail.nfatracer import NFATracerDetailed
-
-from langscape.trail.nfadef import*
+from langscape.ls_const import*
 
 __all__ = ["NFAExpansionParser", "NFAExpansionLexer"]
 
-START_SHIFTER = MAX_ALLOWED_STATES
+START_SHIFTER = TRAIL_MAX_ALLOWED_STATES
+
+# -------------------------------------------------------------------------
+#
+#                 expansion warnings
+#
+# -------------------------------------------------------------------------
+
 
 class LeftRecursionWarning(Warning):
     def __init__(self,*args, **kwd):
@@ -21,14 +26,19 @@ class LeftRecursionWarning(Warning):
         self.rules = []
 
 class NeedsMoreExpansionWarning(Warning): pass
-class RightExpansionWarning(Warning): pass
+class FirstFollowConflict(Warning): pass
 class DriftingExpansionWarning(Warning): pass
 
 warnings.simplefilter("always",LeftRecursionWarning)
 warnings.simplefilter("always",NeedsMoreExpansionWarning)
-warnings.simplefilter("always",RightExpansionWarning)
+warnings.simplefilter("always",FirstFollowConflict)
 
-@langscape.util.psyco_optimized
+# ----------------------------------------------------------------------------------------
+#
+#                   auxiliary functions
+#
+# ----------------------------------------------------------------------------------------
+
 def combinations(l):
     if l == ():
         return ((),)
@@ -63,8 +73,14 @@ def lower_triangle(lst):
     L = (_lst,_lst)
     return combinations(L)
 
+# ----------------------------------------------------------------------------------------
+#
+#                   status reports
+#
+# ----------------------------------------------------------------------------------------
+
 class AbstractExpansionStatusReport(object):
-    def __init__(self, type = "Parser"):
+    def __init__(self, typ = "Parser"):
         pass
 
     def print_rule(self, status, name, nid, states):
@@ -76,14 +92,17 @@ class AbstractExpansionStatusReport(object):
     def print_trailer(self):
         pass
 
-
+class SuppressExpansionMessagesReport(AbstractExpansionStatusReport):
+    '''
+    This status report does essentially nothing.
+    '''
 
 class ExpansionStatusReport(AbstractExpansionStatusReport):
     '''
     Class used to format NFA expansion messages in a tabular way.
     '''
-    def __init__(self, type = "Parser"):
-        self.type = type
+    def __init__(self, typ = "Parser"):
+        self.typ = typ
         self.ok_cnt  = 0
         self.fail_cnt  = 0
 
@@ -98,8 +117,8 @@ class ExpansionStatusReport(AbstractExpansionStatusReport):
     def print_header(self):
         print
         print "======================."
-        print "%s Expansion"%self.type,
-        print " "*5 if len(self.type) == 5 else " "*4,
+        print "%s Expansion"%self.typ,
+        print " "*5 if len(self.typ) == 5 else " "*4,
         print "|"
         print "======================+=======================================================."
         print "Status  | Expanded rule                           | Node Id   | Nbr of states |"
@@ -110,40 +129,37 @@ class ExpansionStatusReport(AbstractExpansionStatusReport):
             print "1 NFA expanded"
         else:
             print "%s NFAs expanded"%self.ok_cnt
-        if self.fail_cnt>0:
-            if self.fail_cnt == 1:
-                print "1 NFA expansion failed -> NFA%s uses backtracking"%self.type
-            else:
-                print "%s NFA expansions failed -> NFA%s uses backtracking"%(self.fail_cnt, self.type)
+
+        if self.fail_cnt == 1:
+            print "1 NFA expansion failed -> NFA%s applies lookahead analysis"%self.typ
+        elif self.fail_cnt>1:
+            print "%s NFA expansions failed -> NFA%s applies lookahead analysis"%(self.fail_cnt, self.typ)
         print
 
 
-#################################################################################################
+# ----------------------------------------------------------------------------------------
 #
+#                   NFAExpansion base class
 #
-#  NFAExpansion
-#
-#
-#################################################################################################
+# ----------------------------------------------------------------------------------------
 
 class NFAExpansion(object):
-    # TODO: maxdepth needs improved reasoning. What are the error cases and how can they be
-    #       detected early?
     '''
     Base class for Lexer / Parser specific expansions.
     '''
     def __init__(self, langlet, nfadata):
-        self.nfadata = nfadata
+        '''
+        :param langlet: langlet object
+        :param nfadata: NFAData object ( defined by nfagen.py )
+        '''
+        self.nfadata   = nfadata
         self.max_depth = max(self.nfadata.depths.values())
-        self.warn_cnt = 0
-        self.size = 0
-        self.offset_factor = 2  # used
-        self.report = ExpansionStatusReport(self.get_type())
+        self.warn_cnt  = 0
+        self.size      = 0
+        self.report    = None
+        self.offset    = langlet.langlet_id
 
     def expand(self, rule = 0, visited = set()):
-        raise NotImplementedError
-
-    def get_type(self):
         raise NotImplementedError
 
     def node_name(self, item):
@@ -151,12 +167,12 @@ class NFAExpansion(object):
 
     def _get_next_state(self, transitions, state, stack):
         if len(stack)>10*self.max_depth:
-            raise RuntimeError
+            raise OverflowError
         stack.append(state[0])
         next_states = []
         states = transitions[state]
         for S in states:
-            if S[1] in CONTROL:
+            if S[1] in TRAIL_CONTROL:
                 follow = self._get_next_state(transitions, S, stack)
                 next_states+=follow
             else:
@@ -166,20 +182,20 @@ class NFAExpansion(object):
     def _all_selections(self, r):
         '''
         This method creates all possible state sets for a given NFA. Form those sets all selections
-        can be derived easily by projection i.e. set(s[0] for s in states).
+        can be derived easily by projection: selections = set(s[0] for s in states).
         '''
         selections = []
         transitions_redux = {}
         transitions = self.nfadata.nfas[r][2]
         for state in transitions:
-            if state[1] in CONTROL:
+            if state[1] in TRAIL_CONTROL:
                 continue
             follow = self._get_next_state(transitions, state, [])
             transitions_redux[state] = follow
             selections.append(follow)
 
-        # So far we have only determined the follow sets of individual states S that are keys of NFA transitions.
-        # But suppose a state set contains a subset {S1, S2, ..., Sk} with
+        # At this point we have only determined the follow sets of individual states S that are keys of NFA
+        # transitions. But suppose a state set S contains a subset {S1, S2, ..., Sk} with
         # a = nid(S1) = nid(S2) = ... = nid(Sk). A parser would apply a selection tracer.select(a) and this
         # yields a unification of the follow sets of all the Si. Those need to be computed and it has to be
         # taken care that each of those sets is computed only once.
@@ -188,18 +204,22 @@ class NFAExpansion(object):
         stack = selections[:]
         while stack:
             selection = stack.pop()
-            S = set(s[0] for s in selection if s[0]!=None)
+            S = set(s[0] for s in selection if s[0]!=FIN)
+            # S contains all nid's of a selection without duplicates
             for s in S:
-                multiple = [L for L in selection if L[0] == s]
+                # multiple contains all states of a given nid
+                multiple = [state for state in selection if state[0] == s]
                 if len(multiple)>1:
-                    multiindex = tuple(sorted([L[1] for L in multiple]))
+                    # multiindex is a tuple of indices -- control characters should
+                    # be eliminated
+                    multiindex = tuple(sorted([state[1] for state in multiple]))
                     if multiindex in index_set:
                         continue
                     else:
                         index_set.add(multiindex)
                     new_selections = set()
-                    for L in multiple:
-                        new_selections.update(transitions_redux[L])
+                    for state in multiple:
+                        new_selections.update(transitions_redux[state])
                     new_selections = list(new_selections)
                     selections.append(new_selections)
                     stack.append(new_selections)
@@ -215,38 +235,37 @@ class NFAExpansion(object):
     def _compute_follow_sets(self, start):
         follow = []
         for T in self._all_selections(start[0]):
-            K = [state for state in T if state[0] is not None]
+            K = [state for state in T if state[0] is not FIN]
             if len(K)>1:
                 follow.append(K)
         return follow
 
-
-    #@langscape.util.psyco_optimized
     def expand_all(self):
         '''
         Expand each rule that requires expansion.
         '''
         self.size    = sum(len(nfa[2]) for nfa in self.nfadata.nfas.values())
-        self.shifter = MAX_ALLOWED_STATES
-        visited = set()
+        self.shifter = TRAIL_MAX_ALLOWED_STATES
         self.report.print_header()
+
+        visited   = set()
         rule_data = {}
-        expanded = set()
+        expanded  = set()
         for r in self.nfadata.nfas:
             if r not in visited:
                 try:
                     self.expand(r, visited)
                 except (LeftRecursionWarning, OverflowError), e:
                     self.report.print_rule("Failed", self.node_name(r), r, 0)
-                    exp = self.nfadata.expansion_target.get(r)
+                    exp = self.nfadata.expanded.get(r)
                     if exp:
                         self.nfadata.nfas[r] = exp
-                        del self.nfadata.expansion_target[r]
-                    continue
-                for s in set(self.nfadata.expansion_target)-expanded:
-                    n = len(self.nfadata.nfas[s][2])
-                    expanded.add(s)
-                    self.report.print_rule("OK", self.node_name(s), s, n)
+                        del self.nfadata.expanded[r]
+                else:
+                    for s in set(self.nfadata.expanded) - expanded:
+                        n = len(self.nfadata.nfas[s][2])
+                        expanded.add(s)
+                        self.report.print_rule("OK", self.node_name(s), s, n)
         self.report.print_trailer()
 
 
@@ -272,7 +291,7 @@ class NFAExpansion(object):
 
                i)   On each occurence of L1 on the RHS of the NFA_Z we replace L1 by First_A.
                ii)  We replace L1 as a key of NFA_Z by L1`.
-               iii) The terminal (None, '-', A) of NFA_A will be replaced by L1`. This way we can link
+               iii) The terminal (FIN, FEX, A) of NFA_A will be replaced by L1`. This way we can link
                     the endpoint of NFA_A with with NFA_Z via L1`.
         '''
         # TODO: the shift-index computation is still crap. Sometimes consistency checks fails and manipulation
@@ -289,8 +308,8 @@ class NFAExpansion(object):
             raise LeftRecursionWarning
 
         # store reminder
-        if not target_rule in self.nfadata.expansion_target:
-            self.nfadata.expansion_target[target_rule] = copy.deepcopy(Z)
+        if not target_rule in self.nfadata.expanded:
+            self.nfadata.expanded[target_rule] = copy.deepcopy(Z)
 
         # shifted NFA will be embedded in top level NFA
         # ...
@@ -298,10 +317,10 @@ class NFAExpansion(object):
         trans_Z    = Z[2]
         follow_A = trans_A[start_A]
 
-        # this will replace the exit symbol (None, '-', nid_A) in the shifted NFA.
-        transit  = (state[0], SKIP, self.shifter, state[-1])
+        # this will replace the exit symbol (FIN, FEX, nid_A) in the shifted NFA.
+        transit  = (state[0], TRAIL_SKIP, self.shifter, state[-1])
         if state[0] == state[-1]:
-            R_NAME = A[1].split(":")[0]
+            R_NAME = A[0].split(":")[0]
             raise RuntimeError("no expansion of `%s` possible in `%s`!"%(R_NAME, Z[1]))
 
         #self.shifter+=1
@@ -317,7 +336,7 @@ class NFAExpansion(object):
 
         for follow in trans_A.values():
             for L in follow:
-                if L[0] is None:
+                if L[0] is FIN:
                     follow.remove(L)
                     if transit not in follow:
                         follow.append(transit)
@@ -331,7 +350,7 @@ class NFAExpansion(object):
         for key, follow in trans_Z.items():
             follow_set.update(follow)
             for f in follow:
-                if f[0]!=None:
+                if f[0]!=FIN:
                     trans = trans_Z.get(f)
                     if not trans:
                         raise RuntimeError, "Failed embedding: embedd_nfa(self, state: %s, at: %s)"%(state, target_rule)
@@ -344,13 +363,14 @@ class NFAExpansion(object):
 
     def _shift_nfa_index(self, nfa):
         '''
-        @param nfa: single nfa to be shifted
-        @return: (start-state, shifted transitions)
+        :param nfa: single nfa which needs index shift
+        :return: (start-state, shifted transitions)
 
         Description ::
-            When embedding transitions of an NFA A into transitions of another NFA Z one
-            has to take care for not-overwriting transitions of a previous embedding of A into Z.
-            This is done by adding a value V to each index IDX of a state L:
+
+            It often happens that an NFA A is embedded within another NFA Z multiple times.
+            In those cases one has to take care for not-overwriting transitions of a previous embedding of A into Z.
+            This is done by adding a value V - the shift value - to each index IDX of a state L:
 
                  (nid, IDX, link) -> (nid, IDX+V, link)
         '''
@@ -359,9 +379,9 @@ class NFAExpansion(object):
         trans  = nfa[2]
         states = trans.keys()
         state_map = {}
-        states.sort(key = lambda state: ( state[1] if state[1] not in CONTROL else state[2]))
+        states.sort(key = lambda state: ( state[1] if state[1] not in TRAIL_CONTROL else state[2]))
         for state in states:
-            if state[1] in CONTROL:
+            if state[1] in TRAIL_CONTROL:
                 state_map[state] = (state[0], state[1], shift, state[3])
             else:
                 state_map[state] = (state[0], shift, state[2])
@@ -379,12 +399,12 @@ class NFAExpansion(object):
     def check_expanded(self, nfamodule, rule = None, print_warning = False):
 
         def check(r, state, tracer, visited):
-            must_trace = False
-            states    = tracer.select(state[0])
-            selection = list(set(s[0] for s in states if s and s[0]!=None))
-            R = set()
-            C = {}
+            R   = set()
+            C   = {}
             msg = ""
+            must_trace = False
+            states     = tracer.select(state[0])
+            selection  = list(set(s[0] for s in states if s and s[0]!=FIN))
             for i,s in enumerate(selection):
                 if is_token(s):
                     S = set([s])
@@ -409,7 +429,7 @@ class NFAExpansion(object):
                     C[s] = S
 
             for state in states:
-                if state[0] is not None and state not in visited:
+                if state[0] is not FIN and state not in visited:
                     visited.add(state)
                     subtracer = tracer.clone()
                     check(r, state, subtracer, visited)
@@ -428,18 +448,21 @@ class NFAExpansion(object):
         return backtracking
 
 
-    def check_rightexpand(self):
+    def check_first_follow_conflict(self):
         '''
-        Dumps an unconditional RightExpansionWarning when warning case is detected.
+        A FirstFollowConflict warning is raised when a conflict occurs.
 
-        Description ::
-            This method checks for `horizontal ambiguities`. By this we mean ambiguities that occur
+        Background ::
+
+            This method checks for first/follow conflicts. A first/follow conflict is an ambiguity that occur
             in grammars like
 
-               G: A* B
-               B: A
+               G: A* A
 
-            If 'AA' is given one can derive G -> A B or G -> A A.
+            If a word 'AA' is given one can match it with the first A* ( which leads to an error ) or the first character
+            by A* and the second by A.
+
+            A first/follow conflict shall always be removed and it needs to be removed manually!
         '''
         last_sets  = self.nfadata.compute_last_set()
         fin_cycles = self.nfadata.compute_fin_cycles()
@@ -467,7 +490,7 @@ class NFAExpansion(object):
                             if B in fin_cycles[A]:
                                 warn_text = "%s -> LastSet(%s) /\\ set([%s]) != {}"%(self.node_name(r),self.node_name(A),self.node_name(B)) #, format_stream(T,i))
 
-                                warnings.warn_explicit(warn_text, RightExpansionWarning, "nfadatagen.py", sys._getframe(0).f_lineno-1)
+                                warnings.warn_explicit(warn_text, FirstFollowConflict, "nfadatagen.py", sys._getframe(0).f_lineno-1)
                                 warned.add((r,A,B))
                                 break
                     else:
@@ -477,30 +500,25 @@ class NFAExpansion(object):
                             if C:
                                 warn_text = warn_text = "%s -> LastSet(%s) /\\ FirstSet(%s) != {}"%(self.node_name(r), self.node_name(A),self.node_name(B)) #,format_stream(T,i))
 
-                                warnings.warn_explicit(warn_text, RightExpansionWarning, "nfadatagen.py", sys._getframe(0).f_lineno-1)
+                                warnings.warn_explicit(warn_text, FirstFollowConflict, "nfadatagen.py", sys._getframe(0).f_lineno-1)
                                 warned.add((r,A,B))
                                 print "                  /\\", set([self.node_name(c) for c in C])
                                 break
 
 
-#################################################################################################
+# ----------------------------------------------------------------------------------------
 #
+#                   NFAExpansion for parsers
 #
-#  NFAExpansionParser
-#
-#
-#################################################################################################
+# ----------------------------------------------------------------------------------------
 
 class NFAExpansionParser(NFAExpansion):
     def __init__(self, langlet, nfadata):
         super(NFAExpansionParser, self).__init__(langlet, nfadata)
         self.start_symbol = nfadata.start_symbols[0]
-        self.offset    = langlet.langlet_id
         self.sym_name  = langlet.parse_symbol.sym_name
         self.tok_name  = langlet.parse_token.tok_name
-
-    def get_type(self):
-        return "Parser"
+        self.report    = ExpansionStatusReport("Parser")
 
     def node_name(self, item):
         if type(item) == str:
@@ -509,25 +527,28 @@ class NFAExpansionParser(NFAExpansion):
 
     def expand(self, rule = 0, visited = set()):
         '''
-        Let K be the reduced NFA[r]. For each transition ::
+        Algorithm ::
 
-            S -> {L1, ..., Ln}
+            For each transition
 
-        with at least two follow states L1, L2 and Li!=None we determine
-        the corresponding selection ::
+                S -> {L1, ..., Ln}
 
-            sel = {s1, ..., sk}
+            in NFA[rule] with at least two follow states L1, L2 and Li!=None we determine
+            the corresponding selection
 
-        From sel we build Ri = s1.reach \/ s2.reach \/ .... si.reach successively.
+                sel = {s1, ..., sk}
 
-        If Ri intersects with s(i+1) find the first sj, j=1,...,i with ::
+            From sel we build Ri = s1.reach \/ s2.reach \/ .... si.reach successively.
 
-                sj.reach /\ s(i+1).reach
+            If Ri intersects with s(i+1) find the first sj, j=1,...,i with
 
-        Now embedd the smaller of both NFAs into K.
+                    sj.reach /\ s(i+1).reach
 
-        Repeat this procedure for each transition T until Rn-1 /\ sn.reach = {}.
+            Now embedd the smaller of both NFAs into NFA[rule].
+
+            Repeat this procedure for each transition T until Rn-1 /\ sn.reach = {}.
         '''
+
         if not rule:
             rule = self.start_symbol
 
@@ -538,13 +559,13 @@ class NFAExpansionParser(NFAExpansion):
             more = False
             selections = self._all_selections(rule)
 
-            if len(selections)>MAX_ALLOWED_STATES:
-                raise OverflowError("NFA size > MAX_ALLOWED_STATES. Cannot expand rule `%s : %s`"%(rule, self.node_name(rule)))
+            if len(selections)>TRAIL_MAX_ALLOWED_STATES:
+                raise OverflowError("NFA size > TRAIL_MAX_ALLOWED_STATES. Cannot expand rule `%s : %s`"%(rule, self.node_name(rule)))
             if self.warn_cnt>10:
                 raise OverflowError("More than ten expansion warnings issued. Expansion is terminated!")
 
             for follow in selections:
-                selectable = sorted(list(set(s[0] for s in follow if s and s[0]!=None)))
+                selectable = sorted(list(set(s[0] for s in follow if s and s[0]!=FIN)))
                 if len(selectable)<=1:
                     continue
                 R = set()
@@ -585,13 +606,11 @@ class NFAExpansionParser(NFAExpansion):
                 break
 
 
-#################################################################################################
+# ----------------------------------------------------------------------------------------
 #
+#                   NFAExpansion for lexers
 #
-#  NFAExpansionLexer
-#
-#
-#################################################################################################
+# ----------------------------------------------------------------------------------------
 
 class LexerTerminalSet(dict):
     max_tid = 0
@@ -627,32 +646,28 @@ class NFAExpansionLexer(NFAExpansion):
     def __init__(self, langlet, nfadata):
         super(NFAExpansionLexer, self).__init__(langlet, nfadata)
         self.start_symbol = langlet.lex_symbol.token_input
-        self.sym_name  = langlet.lex_symbol.sym_name
-        self.tok_name  = langlet.lex_token.tok_name
-        self.token_map = langlet.lex_token.token_map
-        self.charset   = langlet.lex_token.charset
+        self.sym_name     = langlet.lex_symbol.sym_name
+        self.tok_name     = langlet.lex_token.tok_name
+        self.token_map    = langlet.lex_token.token_map
+        self.charset      = langlet.lex_token.charset
+        self.offset       = langlet.langlet_id
         self.lexer_terminal = LexerTerminalSet()
-        self.offset = langlet.langlet_id
         self.kwd_index = max(self.nfadata.keywords.values())+1
-        self.initial_lexer_terminal()
-
-    def get_type(self):
-        return "Lexer"
+        self.report    = ExpansionStatusReport("Lexer")
+        self.initial_lexer_terminals()
 
     def node_name(self, item):
         return self.sym_name.get(item,"")
 
     def is_token(self, s):
-        return ( s in self.nfadata.terminals or \
-                 s in self.lexer_terminal)
+        return (s in self.nfadata.terminals or s in self.lexer_terminal)
 
-    def initial_lexer_terminal(self):
+    def initial_lexer_terminals(self):
         for name, val in self.charset.__dict__.items():
             tid = self.token_map[name]
             self.lexer_terminal[tid] = LexerTerminal(tid, val, name)
         for c, val in self.nfadata.keywords.items():
             self.lexer_terminal[val] = LexerTerminal(val, set([c]), c)
-
 
     def expand_all(self):
         super(NFAExpansionLexer, self).expand_all()
@@ -681,7 +696,6 @@ class NFAExpansionLexer(NFAExpansion):
                 nids[i] = k
         return nids
 
-
     def expand_charset(self, rule, start, nfa):
         more = True
         while more:
@@ -689,7 +703,7 @@ class NFAExpansionLexer(NFAExpansion):
             kicked = []
             selections = self._all_selections(start[0])
             for trans in selections:
-                follow = [f for f in trans if f[0]!=None and f not in kicked]
+                follow = [f for f in trans if f[0]!=FIN and f not in kicked]
                 if len(follow)<2:
                     continue
                 lexer_terminal = self.split(follow)
@@ -698,7 +712,7 @@ class NFAExpansionLexer(NFAExpansion):
                     # LexerTerminal. If this is not the case we create a new LexerTerminal from this set.
                     nids = []
                     for S in sets:
-                        if len(S) == 1:
+                        if isinstance(S, set) and len(S) == 1:
                             nids.append(list(S)[0])
                             continue
                         for P in self.lexer_terminal.values():
@@ -788,7 +802,6 @@ class NFAExpansionLexer(NFAExpansion):
                     R = K
                 lexer_terminal[A] = R
         return lexer_terminal
-
 
     def has_intersection(self, R_A, R_B):
         for t in R_A:

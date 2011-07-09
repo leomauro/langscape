@@ -1,6 +1,6 @@
+from textwrap import dedent
 import langscape.util.unittest as unittest
 from langscape.csttools.cstsearch import find_node, find_all_token
-from langscape.csttools.cstrepr import pprint, prepare_source
 
 class TestCSTFunctionBase(unittest.TestCase):
     def setUp(self):
@@ -17,7 +17,7 @@ class TestCSTFunctionBase(unittest.TestCase):
             print bar
         print 89
         '''
-        cst = self.python.parse(prepare_source(src))
+        cst = self.python.parse(dedent(src))
         self.assertEqual(len(self.fn_py.split(cst))>=2, True)
 
     def test_split_cov(self):
@@ -26,7 +26,7 @@ class TestCSTFunctionBase(unittest.TestCase):
             print bar
         print 89
         '''
-        cst = self.cover.parse(prepare_source(src))
+        cst = self.cover.parse(dedent(src))
         self.assertTrue(len(self.fn_cov.split(cst))>=2)
 
     def test_map(self):
@@ -76,7 +76,6 @@ class TestCSTFunctionCoverage(unittest.TestCase):
 
     def test_pprint_simple(self):
         cst = self.langlet.parse("1+2\n")
-        #pprint(self.python, cst)
 
     def test_pprint_simple2(self):
         cst = self.langlet.parse("1+3\n")

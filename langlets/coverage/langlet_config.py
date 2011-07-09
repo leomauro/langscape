@@ -20,14 +20,6 @@ opt.add_option("-d", "--deactivate-default", dest="deactivate_default", action =
 opt.add_option("-o", "--output", dest="output",  help="Report output file")
 opt.add_option("-e", "--erase", dest="erase",  help="Delete all pycv files found in the directory of the main module and below", action = "store_true")
 
-
-#
-#  optional modules
-
-optional_modules = {
-	'importer': True,
-}
-
 #
 # compiled module suffix -- default is .pyc
 

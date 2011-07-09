@@ -1,25 +1,9 @@
-# URL:     http://www.fiber-space.de
-# Author:  Kay Schluehr <easyextend@fiber-space.de>
-# Date:    10 May 2006
-#
-# Genereral CST transformation module. Defines two classes FSTransformer and Transformer.
-#
-# Transformer is derived from FSTransformer whereas FSTransformer holds one or more
-# instances of Transformer objects. Transformer objects are langlet specific and FSTransformer
-# collects node handler methods defined for Transformers.
-#
-
-
-# TODO: transformer is not langlet independent
-
 import sys
 from langscape.util.path import path
-from langscape.util import psyco_optimized
 from langscape.csttools.cstsearch import*
 from langscape.csttools.cstrepr import*
 from langscape.csttools.cstcheck import*
 from langscape.csttools.cstutil import is_token
-from langscape.base.langlet import LangletTable
 from langscape.base.transform_dbg import transform_dbg, t_dbg
 import langscape.base.loader as loader
 
@@ -27,18 +11,11 @@ import langscape.base.loader as loader
 __all__ = ["Transformer", "transform", "transform_dbg", "t_dbg"]
 
 
-# new transformer?
-
-# Required: a simple visitor for a single langlet transformer.
-# Challenge: If N is an Input node and [A, B, C, ... ] are output nodes, find a safe method
-#            to replace N.
-#            This might be fully encapsulated and tested using Chain objects:
+# annotate LangletTransformer method that express a node transformation using:
 #
-#            1. Fetch all node chains for nodes which are decorated. No marker is needed.
-#            2. Apply handlers on those nodes.
-#            3. Retrofit returned nodes ( if there are any ) into the Chain.
-#
-# Problems:  What if N -> N' eliminates nodes, which have been found?
+# @transform
+# def foo(self, ...):
+#      ...
 #
 
 class TransformDecorator(object):
@@ -71,15 +48,15 @@ class Transformer(object):
         self._node_stack = {}
         self._find_handler()
 
+    def clean_up(self):
+        "This method is called by the framework. Overwrite it in subclasses"
+
     def run(self, tree, **kwd):
         self.options = kwd
         self._node_stack = {}
         cst = self.mark_node(tree)
-        self.transform_tree(cst, [])
+        self._transform_tree(cst, [])
         return cst
-
-    def count_node_handlers(self):
-        return len(self._handler)
 
     def node_stack(self, node):
         chain = self._node_stack.get(id(node))
@@ -87,23 +64,6 @@ class Transformer(object):
             return Chain(chain)
         else:
             raise ValueError("No node_stack available for node")
-
-    def _find_handler(self):
-        '''
-        Method used to find all methods that handle one node.
-        '''
-        items = [(name, getattr(self, name)) for name in dir(self)]
-        for name, val in items:
-            if hasattr(val, "cst_transformer"):
-                if hasattr(val, "kwd_transformer"):
-                    for kwd in val.kwd_transformer:
-                        self._handler[self.keyword[kwd]] = val
-                elif hasattr(self.symbol, name):
-                    self._handler[getattr(self.symbol, name)] = val
-                elif hasattr(self.token, name):
-                    self._handler[getattr(self.token, name)] = val
-                else:
-                    raise ValueError("Cannot find token, symbol or keyword that matches '%s'"%val)
 
 
     def mark_node(self, tree, parent = None, par_idx = -1, untrans = set()):
@@ -156,10 +116,7 @@ class Transformer(object):
                 self.unmark_node(item, nid)
         return tree
 
-    def is_transformable(self, tree):
-        return isinstance(tree, cstnode) and tree.transformable
-
-    def to_node_list(self, handler_name, nodes):
+    def _to_node_list(self, handler_name, nodes):
         if isinstance(nodes, list):
             if isinstance(nodes[0], int):
                 return (nodes,)
@@ -174,7 +131,7 @@ class Transformer(object):
                         self.langlet.get_node_name(nid), self.langlet.get_node_name(node[0]), handler_name))
         return nodes
 
-    def create_translation_error(self, tree, nodes, node_stack):
+    def _create_translation_error(self, tree, nodes, node_stack):
         repl_id = nodes[0][0]
         if is_token(repl_id):
             raise TranslationError("Cannot substitute non-terminal %s by terminal %s"%(
@@ -189,13 +146,13 @@ class Transformer(object):
             trace = str(trace)
 
             S = "Failed to substitute node %s by %s.\n  Node %s must be one of the nodes or a projection in:  \n\n%s"%(
-                 (tree[0], to_text(tree[0])),
-                 (repl_id, to_text(repl_id)),
-                 (repl_id, to_text(repl_id)),
+                 (tree[0], self.langlet.get_node_name(tree[0])),
+                 (repl_id, self.langlet.get_node_name(repl_id)),
+                 (repl_id, self.langlet.get_node_name(repl_id)),
                  trace)
         raise TranslationError( S )
 
-    def substitute(self, tree, nodes, node_stack):
+    def _substitute(self, tree, nodes, node_stack):
         '''
         Let (parent(tree), parent(parent(tree)), ..., parent(...(parent(tree))...))
         the parental hierarchy of tree. It can be denoted as (P1, ..., P(n)) where P(i) is
@@ -206,7 +163,8 @@ class Transformer(object):
         id of N(j) is repl_id.
         '''
         repl_id = nodes[0][0]
-
+        if tree[0] == repl_id:
+            return (tree, node_stack)
         if is_token(repl_id):          # replace token
             if is_token(tree[0]):
                 tree[:] = nodes[0]
@@ -227,12 +185,11 @@ class Transformer(object):
                     except IndexError:    # nothing to pop from node_stack
                         P[:] = nodes[0]
                         return (P, node_stack[i-1:])
-                C_0 = P
-        self.create_translation_error(tree, nodes, node_stack)
+        self._create_translation_error(tree, nodes, node_stack)
 
 
-    def transform_tree(self, tree, chain):
-        if self.is_transformable(tree):
+    def _transform_tree(self, tree, chain):
+        if isinstance(tree, cstnode) and tree.transformable: # is tree transformable?
             nid = tree[0]
             handler = self._handler.get(nid)
             if handler:
@@ -240,12 +197,28 @@ class Transformer(object):
                 tree.transformable = False
                 nodes = handler(tree)
                 if nodes:
-                    nodes = self.to_node_list(handler.__name__, nodes)
-                    (N, parent_chain) = self.substitute(tree, nodes, chain)
-                    self.transform_tree(N, parent_chain+[N])
+                    nodes = self._to_node_list(handler.__name__, nodes)
+                    (N, parent_chain) = self._substitute(tree, nodes, chain)
+                    self._transform_tree(N, parent_chain+[N])
                     return
         for sub in tree[1:]:
             if isinstance(sub, list):
-                self.transform_tree(sub, chain+[tree])
+                self._transform_tree(sub, chain+[tree])
 
+    def _find_handler(self):
+        '''
+        Method used to find all methods that handle one node.
+        '''
+        items = [(name, getattr(self, name)) for name in dir(self)]
+        for name, val in items:
+            if hasattr(val, "cst_transformer"):
+                if hasattr(val, "kwd_transformer"):
+                    for kwd in val.kwd_transformer:
+                        self._handler[self.keyword[kwd]] = val
+                elif hasattr(self.symbol, name):
+                    self._handler[getattr(self.symbol, name)] = val
+                elif hasattr(self.token, name):
+                    self._handler[getattr(self.token, name)] = val
+                else:
+                    raise ValueError("Cannot find token, symbol or keyword that matches '%s'"%val)
 

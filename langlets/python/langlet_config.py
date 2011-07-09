@@ -13,13 +13,6 @@ opt = getoptions()
 #
 #     opt.add_option("-o", "--output", dest="output",  help="Report output")
 
-#
-#  optional modules
-
-optional_modules = {
-	'importer': True,
-}
-
 
 
 # compiled module suffix -- default is .pyc

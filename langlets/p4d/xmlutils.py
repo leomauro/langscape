@@ -2,7 +2,6 @@
 import sys
 from p4dutils import pprinter
 import xml.parsers.expat
-from htmlutils.BeautifulSoup import BeautifulSoup, Tag
 
 class Parser(object):
     def __init__(self):
@@ -66,17 +65,6 @@ class ExpatParser(Parser):
         parser.CommentHandler           = self.comment
         return parser
 
-class BeautifulSoupParser(object):
-    def parse(self, s):
-        soup = BeautifulSoup(s)
-        return self._create_tree(soup.first())
-
-    def _create_tree(self, soup):
-        tag   = soup.name
-        attrs = dict(soup.attrs)
-        children = [self._create_tree(item) for item in soup.contents if isinstance(item, (BeautifulSoup, Tag))]
-        text = (soup.string if soup.string else '')
-        return [tag, attrs, children, text]
 
 class xmlprinter(pprinter):
     def filter(self, *args, **kwd):

@@ -1,8 +1,9 @@
-###############  langlet Postlexer + Interceptor definitions ############
+###############  langlet Postlexer  ############
 
 from langlet_config import parent_langlet
 from langscape.base.loader import BaseClass
 from langscape.base.postlexer import postlex
+
 
 class LangletPostlexer(BaseClass("Postlexer", parent_langlet)):
     '''
@@ -13,8 +14,8 @@ class LangletPostlexer(BaseClass("Postlexer", parent_langlet)):
         name = tok[1]
         if name[-1] == '-':
             col = tok[-1]
-            self.add_token([lex_symbol.NAME, name[:-1], tok[2], col])
-            self.add_token([lex_symbol.MINUS, '-', tok[2], col+len(name)-1])
+            self.add_token([self.lex_symbol.NAME, name[:-1], tok[2], col])
+            self.add_token([self.lex_symbol.MINUS, '-', tok[2], col+len(name)-1])
         else:
             self.add_token(tok)
 

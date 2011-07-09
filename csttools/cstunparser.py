@@ -1,8 +1,8 @@
 __all__ = ["Unparser"]
 
-from langscape.trail.nfadef import tokenstring, INTRON_NID
+from langscape.csttools.cstutil import tokenstring, INTRON_NID, INDENT
 from langscape.csttools.cstsearch import find_node, find_all_token
-from langscape.ls_const import INDENT
+
 
 # used by formatter
 
@@ -29,6 +29,7 @@ class UnparserMeta(type):
 class Unparser:
     __metaclass__ = UnparserMeta
     def __init__(self, langlet, **kwd):
+        self.langlet   = langlet
         self.symbol    = langlet.parse_symbol
         self.token     = langlet.parse_token
         self.keywords  = langlet.parse_nfa.keywords
@@ -37,6 +38,7 @@ class Unparser:
         self.indent_level = 0
         self.offset = langlet.langlet_id
         self.output = [""]
+        self._tok   = None # used for error
         self.__dict__.update(kwd)
 
     def reset(self):
@@ -101,6 +103,7 @@ class Unparser:
     # formatting functions
 
     def _format(self, tok, intron = ""):
+        self._tok = tok
         if intron:
             # print "F-INTRON", [self.output[-1], tok[1], intron]
             self._format_with_intron(intron, tok)
@@ -116,6 +119,10 @@ class Unparser:
             c1 = (text[0] if text else "")
 
             for formatter in self.formatters.values():
+                if text in ".({[":
+                    if last in self.keywords:
+                        self.output.append(" "+text)
+                        break
                 res = formatter(self, c0, c1, text)
                 if res:
                     self.output.append(res)
@@ -143,7 +150,7 @@ class Unparser:
         try:
             return c in "+~*/&%|"
         except TypeError:
-            print c
+            print "Failed to find object in string:", c, self._tok
             raise
 
     def isquote(self, c):
@@ -197,12 +204,12 @@ class Unparser:
 
 
 if __name__ == '__main__':
-    source = open(r"C:\lang\Python25\Lib\site-packages\langscape\csttools\cstunparser.py").read()
+    source = open("cstunparser.py").read()
     import pprint
     import langscape
     import cProfile as profile
     coverage = langscape.load_langlet("coverage")
-    coverage.options["refactor_mode"] = True
+    coverage.options["refactor_mode"] = False
     cst = coverage.parse(source)
     S = coverage.unparse(cst)
     print S

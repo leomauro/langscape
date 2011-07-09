@@ -2,24 +2,29 @@
 Layers
 ------
 
-We say R1 refers to R2 or R1 -> R2, when R2 is on the rhs of R1. We can successively split
-the set of available nodes in disjoints sets L1, L2 with:
+We say R1 refers to R2 or R1 -> R2, if R2 is on the rhs of R1.
+
+Let us successively split the set of available nodes into disjoints sets L1, L2 with:
 
     For each R1 in L1 there is an R2 in L2 with R1 -> R2, but there is no R2 in L2 with
     R2 -> R1, for all R1 in L1.
 
 We also write L1 => L2.
 
-Here we determine a sequence of node sets (L0, L1,..., Lk) with ::
+The algorithm implemented in this module determines a sequence of node sets
+(L0, L1,..., Lk) with ::
 
-    L0 => L1 => ... = > Lk
+    L0 => L1 => ... => Lk
 
-The Li sets are our layers. A layer can be flat or contain circles i.e. sequences of nodes ::
+The Li sets are our *layers*. A layer can be flat or contain circles i.e. sequences of nodes ::
 
-    R1 -> R2 -> ... -> Rk -> R1
+    R1 => R2 => ... => Rk => R1
 
-Purpose: layers can be used to optimize search processes. We do not have to seek for a node M as
-a subnode of N, if Layer(M) => Layer(N).
+Purpose of building layers ::
+
+    layers can be used to optimize search processes. We do not have to seek for a node M as
+    a subnode of N, if Layer(M) => Layer(N).
+
 '''
 
 from langscape.csttools.cstutil import is_token

@@ -6,7 +6,11 @@ syntax: glob
 *.pyo
 *.bak
 *.ees
+backups/*.*
+old/*.*
+*.log
+
 
 syntax: regexp
-
-^langlets/(?!python|gallery|p4d|coverage|ls_grammar|celeryder|TPython|c).*
+^notes
+^langlets/(?!python|gallery|p4d|coverage|ls_grammar|teuton|c).*

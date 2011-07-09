@@ -4,18 +4,33 @@ from langlet_config import parent_langlet
 from langscape.base.loader import BaseClass
 from langscape.csttools.cstutil import*
 from langscape.csttools.cstsearch import*
+from langscape.util.flatstring import flatstring
 from langscape.base.transformer import transform, transform_dbg, t_dbg
 
-from evalutils import*
+from p4deval import*
 from p4dbase import*
 from bytelet import*
 
 Hex.format = Hex.F_0x
 
+
 class LangletTransformer(BaseClass("Transformer", parent_langlet)):
     '''
     Defines langlet specific CST transformations.
     '''
+    def node_to_list(self, node):
+        args = [self.langlet.fn.Number(node[0])]
+        for sub in node[1:]:
+            if sub[0] in self.token.tok_name.keys():
+                args.append(self.langlet.fn.List(*sub))
+            elif sub[0] in self.registered_node_to_list:
+                args.append(self.node_to_list(node))
+            elif sub[0] in self.registered_node_trans:
+                nd = self.run(sub)
+            else:
+                unparsed = self.langlet.unparse(sub)
+                args.append(self.fn.List(self.fn.Number(sub[0]), self.fn.String(unparsed)))
+        return self.fn.List(*args)
 
     @transform
     def subscript(self, node):
@@ -31,10 +46,10 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
     def SPECNUM(self, node):
         binnum = find_node(node, self.token.Binnumber)
         if binnum:
-            return self.fn.atomize(self.fn.CallFunc("Bin",[self.fn.Number(binnum[1][2:])]))
+            return self.fn.CallFunc("Bin",[self.fn.Number(binnum[1][2:])])
         else:
             hexnum = self.fn.String(' '.join([item[1][2:] for item in find_all(node, self.token.Hexnumber)]))
-            return self.fn.atomize(self.fn.CallFunc("Hex", [hexnum]))
+            return self.fn.CallFunc("Hex", [hexnum])
 
     @transform
     def p4d_attr_access(self, node):
@@ -152,20 +167,20 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         if p4d_comment:
             comment = self.langlet.unparse(node)[2:-2]
             if comment[0] == '*' and comment[-1] == '*':
-                comment = "restringify_"+hide_bad_chars(comment[1:-1])
+                comment  = flatstring(comment[1:-1])
                 p4d_node = P4DNode("**")
             else:
                 p4d_node = P4DNode("*")
-                comment = "restringify_"+hide_bad_chars(comment)
+                comment   = flatstring(comment)
             p4d_node.text = comment
             return p4d_node
         _str = find_node(node, self.token.STRING, depth = 1)
         if _str:
-            return "restringify_"+hide_bad_chars(node[1][1])
-        _specnum = find_node(node, self.symbol.SPECNUM,depth=1)
+            return flatstring(node[1][1])
+        _specnum = find_node(node, self.symbol.SPECNUM,depth =1)
         if _specnum:
             return "evaltoobj_%s"%self.langlet.unparse(self.SPECNUM(_specnum))
-        _number = find_node(node, self.token.NUMBER,depth=1)
+        _number = find_node(node, self.token.NUMBER, depth =1)
         if _number:
             return "evaltonum_"+node[1][1]
         raise TypeError("no P4D object content or attribute: `%s`."%self.langlet.unparse(node))
@@ -305,7 +320,6 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
                     break
                 if find_node(item, self.fn.symbol.arglist):
                     j = i
-
             if j == i-1:
                 _str = find_node(nd, self.fn.token.STRING)
                 _str[1] = "'"+_str[1][1:-1]+":"+locname+"'"
@@ -380,5 +394,20 @@ class InteractiveTransformer(LangletTransformer):
         return str(p4dnode)
 
 
-__superglobal__ = ["mapeval", "P4DNode", "P4D", "P4DList", "P4DName", "P4DNamespace", "P4DAccessError", "P4DContentList", "Bytelet", "ByteletSchema", "LEN", "Hex", "Bin", "VAL", "RAWLEN"]
+__superglobal__ = ["mapeval",
+                   "P4DNode",
+                   "P4D",
+                   "P4DList",
+                   "P4DName",
+                   "P4DNamespace",
+                   "P4DAccessError",
+                   "P4DContentList",
+                   "Bytelet",
+                   "ByteletSchema",
+                   "ByteletError",
+                   "LEN",
+                   "Hex",
+                   "Bin",
+                   "VAL",
+                   "RAWLEN"]
 

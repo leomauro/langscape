@@ -6,7 +6,9 @@ from copy import copy
 import math
 from langscape.util.hexobject import Hex, Bin
 
-__all__ = ["Bytelet", "ByteletSchema", "LEN", "Hex", "Bin", "VAL", "RAWLEN"]
+__all__ = ["Bytelet", "ByteletSchema", "LEN", "Hex", "Bin", "VAL", "RAWLEN", "ByteletError"]
+
+class ByteletError(Exception): pass
 
 ###################################################################
 #
@@ -341,6 +343,7 @@ class Bytelet(p4dbase.P4D):
             for (item,w) in items:
                 h.bytes.extend(item.bytes)
         else:
+            #print "TO-HEX", len(items), [type(t[0]) for t in items]
             offset = 0
             for (item,w) in items:
                 offset, h = h.concat(item, offset, w)
@@ -443,7 +446,7 @@ class ByteletSchema(Bytelet):
                         n = child.hex().num()
                         if n == 0:
                             continue
-                    raise ParserError("[01]: Schema too short. Field `%s` of ByteletSchema `%s` does not match any hexcode."%(child.tag, self.tag))
+                    raise ByteletError("[01]: Schema too short. Field `%s` of ByteletSchema `%s` does not match any hexcode."%(child.tag, self.tag))
                 break
             content = child._tree[-1]
             if isinstance(content, FlowFieldVal):
@@ -451,7 +454,7 @@ class ByteletSchema(Bytelet):
                 content.set_node(child, matched)
                 n = content.flow_value().num()
                 if strict and hexoffset+n>len(bc):
-                    raise ParserError("[02]:Incorrect number of bytes for field `%s`. Expected `%s` bytes but `%s` bytes found."%(child.tag, n, hexoffset+n-len(bc)))
+                    raise ByteletError("[02]:Incorrect number of bytes for field `%s`. Expected `%s` bytes but `%s` bytes found."%(child.tag, n, hexoffset+n-len(bc)))
                 (hexoffset, binoffset),v = bc.section(hexoffset, binoffset, n)
                 matched._children.append(Bytelet([child.tag, {}, [], v], matched))
             elif isinstance(content, FlowLen):
@@ -490,7 +493,7 @@ class ByteletSchema(Bytelet):
                 n = len(content)
                 (hexoffset, binoffset), section = bc.section(hexoffset,binoffset,n)
                 if strict and section != content:
-                    raise ParserError("[03]:Expected content of field `%s` = `%s`. Received: `%s`."%(child.tag, content, section))
+                    raise ByteletError("[03]:Expected content of field `%s` = `%s`. Received: `%s`."%(child.tag, content, section))
                 matched._children.append(Bytelet([child.tag, {}, [], content], matched))
 
             else:
@@ -503,14 +506,14 @@ class ByteletSchema(Bytelet):
             if n<0 and self._parent is None:
                 n = len(bc) - hexoffset
                 if binoffset:
-                    raise ParserError("[041]: Schema too short. ByteletSchema `%s` did not scan %s bits of hexcode."%(self.tag, 8*n-binoffset))
+                    raise ByteletError("[041]: Schema too short. ByteletSchema `%s` did not scan %s bits of hexcode."%(self.tag, 8*n-binoffset))
                 else:
-                    raise ParserError("[042]: Schema too short. ByteletSchema `%s` did not scan %s bytes of hexcode."%(self.tag,n))
+                    raise ByteletError("[042]: Schema too short. ByteletSchema `%s` did not scan %s bytes of hexcode."%(self.tag,n))
             elif n>0 or binoffset:
                 if n>0:
-                    raise ParserError("[051]: Schema too long. ByteletSchema `%s` specified %d bytes that did not match."%(self.tag, n))
+                    raise ByteletError("[051]: Schema too long. ByteletSchema `%s` specified %d bytes that did not match."%(self.tag, n))
                 else:
-                    raise ParserError("[052]: Schema too long. ByteletSchema `%s` specified %d bits that did not match."%(self.tag, binoffset))
+                    raise ByteletError("[052]: Schema too long. ByteletSchema `%s` specified %d bits that did not match."%(self.tag, binoffset))
         matched._remap()
         return matched
 

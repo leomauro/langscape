@@ -4,17 +4,14 @@
 # Author:   Kay Schluehr <kay at fiber-space.de>
 # Creation: 15 Oct 2009
 
+import atexit
+import sys
 
 def fill_superglobals():
     import __builtin__
-    import sys
     import langscape.ls_exceptions
 
-    if sys.version_info[:2] == (2,5):
-        import langscape.util
-        __builtin__.__dict__["abstractmethod"] = langscape.util.abstractmethod
-
-    # make exceptions builtin
+    # load exception classes into __builtin__
 
     for name, value in langscape.ls_exceptions.__dict__.items():
         if isinstance(value, type) and issubclass(value, Exception):
@@ -48,5 +45,3 @@ def create_langlet(langlet_name,
     lgen.run()
 
 
-if __name__ == '__main__':
-    create_langlet("foo2")

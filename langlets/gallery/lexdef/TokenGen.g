@@ -1,3 +1,5 @@
+# base+ext checksum: -211711770
+
 ENDMARKER: T_ENDMARKER
 NAME: A_CHAR ( A_CHAR | A_DIGIT )*
 NUMBER: Number
@@ -55,7 +57,7 @@ COMMENT: LINE_COMMENT ANY* A_LINE_END+
 NL: T_NT
 N_TOKENS: T_N_TOKENS
 token_input: unit* ENDMARKER
-unit: char_start | dot_start | NEWLINE | NUMBER | LEFT | RIGHT | SPECIAL | OPERATOR | COLON | INTRON |  IPv4Address
+unit: char_start | dot_start | NEWLINE | NUMBER | LEFT | RIGHT | SPECIAL | OPERATOR | COLON | INTRON | IPv4Address
 char_start: STRING | NAME
 dot_start: '.' | '.' A_DIGIT+ [Exponent] ['j'|'J']
 LINECONT: A_BACKSLASH A_WHITE* [A_LINE_END | COMMENT]

@@ -1,11 +1,10 @@
 #
 # This test requires gallery to run
 #
-import unittest
-import funcs
-import test_support
-import re
 
+import langscape.util.unittest as unittest
+import funcs
+import re
 
 class TestGallery(unittest.TestCase):
     def test_ip(self):
@@ -95,11 +94,11 @@ class TestGallery(unittest.TestCase):
     def test_switch_with_ips(self):
         switch ip:
             case 127.0.0.1:
-		        print "localhost"
-	        case	 192.168.1.33:
-		        print "wireless"
+                print "localhost"
+            case     192.168.1.33:
+                print "wireless"
         else:
-	        pass
+            pass
 
 
     def test_chainlet(self):
@@ -130,9 +129,7 @@ class TestGallery(unittest.TestCase):
             r = "No co-selection NOK"
         self.assertEqual(r,A111)
 
-def test_main():
-    test_support.run_unittest(TestGallery)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.run_unittest(TestGallery)
 

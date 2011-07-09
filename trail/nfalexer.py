@@ -1,20 +1,24 @@
 import pprint
-
 import langscape.util
 from langscape.ls_const import*
-from langscape.trail.nfadef import rule_error
 from langscape.trail.nfacursor import*
+from langscape.trail.nfareporting import NFAErrorReport
 
 __all__ = ["NFALexer"]
 
 class CharStream(object):
-    '''
-    Defines character iterator.
-    '''
+    # Defines character iterator. CharStream needs to care for line and column
+    # counts which are important for error display and recovery.
+
+    # TODO: unify shift_read_position() with next()
+
     def __init__(self, stream):
-        self.tokstream = stream if stream else '\n'
-        self.position = 0
+        self.charstream = stream if stream else '\n'
         self._size = len(stream)
+        self.reset()
+
+    def reset(self):
+        self.position = 0
         self._line_count = 1
         self._col = 0
         self._nl  = False
@@ -36,10 +40,10 @@ class CharStream(object):
 
     def next(self):
         try:
-            tok = self.tokstream[self.position]
-            if tok in '\n\r':
+            c = self.charstream[self.position]
+            if c in '\n\r':
                 self._nl = True
-            return tok
+            return c
         except IndexError:
             raise StopIteration
 
@@ -65,35 +69,40 @@ class CharSet(object):
 
 class NFALexer(object):
     def __init__(self, langlet):
-        self.langlet    = langlet
-        self.debug      = langlet.options.get("debug_lexer", False)
+        self.langlet     = langlet
+        self.debug       = langlet.options.get("debug_lexer", False)
+
         # grammar derived entities
-        self.rules      = langlet.lex_nfa.nfas
+        self.nfas       = langlet.lex_nfa.nfas
         self.reachables = langlet.lex_nfa.reachables
         self.keywords   = langlet.lex_nfa.keywords
         self.expanded   = langlet.lex_nfa.expanded
         self.charset    = CharSet(langlet.lex_nfa.lexer_terminal, self.keywords)
-        self.start_symbol = langlet.lex_symbol.token_input
         self.parser_kwd = langlet.parse_nfa.keywords
+        self.start_symbol = langlet.lex_symbol.token_input
+
+        # caches used and filled by _is_pseudo_reachable()
         self.lexer_terminal = {}
         self.pseudo_reachable = {}
+
         # special token
-        self.ANY        = self.langlet.lex_token.tokenid.ANY
-        self.STOP       = self.langlet.lex_token.tokenid.STOP
-        self.ENDMARKER  = self.langlet.lex_symbol.ENDMARKER
-        self.UNIT       = self.langlet.lex_symbol.unit
-        self.NAME       = self.langlet.lex_symbol.NAME
+        self.ANY        = langlet.lex_token.tokenid.ANY
+        self.STOP       = langlet.lex_token.tokenid.STOP
+        self.ENDMARKER  = langlet.lex_symbol.ENDMARKER
+        self.UNIT       = langlet.lex_symbol.unit
+        self.NAME       = langlet.lex_symbol.NAME
+
         self.cursors    = {}
-        # the lexer hack
-        self._register_hooks()
+
         # interface between lexer / parser
         self._compute_parser_terminals(langlet.parse_nfa.terminals)
 
-    def _register_hooks(self):
-        self._hooks = {}
-        if hasattr(self.langlet, "LangletInterceptor"):
-            for c, f in self.langlet.interceptor.interceptors.items():
-                self._hooks[c] = f(self.langlet.interceptor) # register an interceptor at some character
+        # if False a parse tree will be returned
+        self.do_tokenize = True
+
+        # used for testing
+        self._error = False
+        self._filename = None
 
     def _compute_parser_terminals(self, terminals):
         self.parser_terminals = set()
@@ -101,32 +110,27 @@ class NFALexer(object):
             if type(s) == int:
                 self.parser_terminals.add(s+SYMBOL_OFFSET)
 
-    def _init_subtrees(self, sym, flat):
+    def _init_subtrees(self, sym):
         if sym in self.expanded:
             return []
         else:
             return [sym]
 
-    @langscape.util.psyco_optimized
     def _new_cursor(self, sym):
         cursor = self.cursors.get(sym)
         if cursor:
             cursor.reset()
             return cursor
         if sym in self.expanded:
-            nfa = self.rules[sym]
+            nfa = self.nfas[sym]
             mtrace  = NFAStateSetSequence(nfa[1], TreeBuilder())
             return NFACursor(nfa, mtrace)
         else:
-            cursor = SimpleNFACursor(self.rules[sym])
+            cursor = SimpleNFACursor(self.nfas[sym])
         self.cursors[sym] = cursor
         return cursor
 
     def _next_selection(self, cursor, sym, char, tokstream):
-        if self._hooks:
-            handler = self._hooks.get(char)
-            if handler:
-                return handler(cursor, sym, char, tokstream)
         return char, cursor.move(sym)
 
     def _store_token(self, sym, cursor, sub_trees, tok, flat):
@@ -146,7 +150,20 @@ class NFALexer(object):
                 return cursor.derive_tree(sub_trees)
         return sub_trees
 
+    def dump_error_message(self, tok, selection, rule):
+        if tok[1] == '\n':
+            tok_string = r"\n"
+        else:
+            tok_string = tok[1]
+        if self._filename:
+            s = "\n    Failed to scan input '%s' at (line %d , column %d) in file:\n    %s\n"%(tok_string, tok[2],tok[3]+1, self._filename)
+            self._filename = None
+        else:
+            s = "Failed to scan input '%s' at (line %d , column %d). \n"%(tok_string, tok[2],tok[3]+1)
+        raise LexerError(s+rule, **{"token": tok, "selection": selection})
+
     def _handle_error(self, sym, cursor, sub_trees, tok, selection):
+        self._error = True
         if sub_trees:
             cst = sub_trees
         else:
@@ -155,18 +172,14 @@ class NFALexer(object):
             except IncompleteTraceError:
                 cst = None
         if cst:
-            if isinstance(cst[0],list):
-                rule = rule_error(self.langlet, cst[-1], selection, self.keywords, type = "lex")
+            nfareport = NFAErrorReport(self.langlet, "lex")
+            if isinstance(cst[0], list):
+                rule = nfareport.error_message(cst[-1], tok, selection)
             else:
-                rule = rule_error(self.langlet, cst, selection, self.keywords, type = "lex")
+                rule = nfareport.error_message(cst, tok, selection)
         else:
-            rule = ""
-        word = tok[1]
-        if tok[1] == '\n':
-            word = r"\n"
-        s = "Failed to scan input '%s' at (line %d , column %d). \n"%(word,tok[2],tok[3]+1)
-        raise LexerError(s+rule, **{"token": tok, "selection": selection})
-
+            rule = ""  # TODO: this is unacceptable
+        self.dump_error_message(tok, selection, rule)
 
     def _is_pseudo_reachable(self, c, s):
         r = self.pseudo_reachable.get((c,s))
@@ -186,7 +199,7 @@ class NFALexer(object):
         return False
 
     def _dbg_info(self, selection, char, T, move):
-        selected = "["+', '.join([(self.langlet.get_node_name(s, "lex") if s is not None else "None") for s in selection ])+"]"
+        selected = "["+', '.join([(self.langlet.get_node_name(s, "lex") if s is not FIN else "None") for s in selection ])+"]"
         try:
             if char in '\n':
                 char = '\\n'
@@ -194,37 +207,37 @@ class NFALexer(object):
             raise ValueError(str(char))
         if move == "step":
             if isinstance(T, str):
-                print "char: %s -- rule: %s"%char
+                print "char: %s -- select: %s"%char
             else:
                 name = self.langlet.get_node_name(T, "lex")
-                print "char: %s -- rule: %s = "%(char, T)+name
-            print "                   "+" "*(len(char)-2)+"next selection: %s"%(selected,)
+                print "char: %s -- select: %s = "%(char, T)+name
+            print " "*21+" "*(len(char)-2)+"next selection: %s"%(selected,)
         else:
             sym, s = T
             name_sym = self.langlet.get_node_name(sym, "lex")
             if isinstance(s, str):
-                print "char: %s -- rule: %s "%(char,"'"+s+"'")+" (shift: %s)"%name_sym
+                print "char: %s -- select: %s "%(char,"'"+s+"'")+" (shift: %s)"%name_sym
             else:
                 name_s = self.langlet.get_node_name(s, "lex")
-                print "char: %s -- rule: %s = "%(char, s)+name_s+" (shift: %s)"%name_sym
-            print "                   "+" "*(len(char)-2)+"next selection: %s"%(selected,)
-
+                print "char: %s -- select: %s = "%(char, s)+name_s+" (shift: %s)"%name_sym
+            print " "*21+" "*(len(char)-2)+"next selection: %s"%(selected,)
 
     def __dbg_info(self, selection, char, sym):
         if char in '\n':
             char = '\\n'
-        print "char: `%s` -- rule: %s -- next selection: %s"%(char, sym, selection)
+        print "char: `%s` -- select: %s -- next selection: %s"%(char, sym, selection)
         name = self.langlet.get_node_name(sym, "lex")
-        print "                   %s"%name
+        print " "*21+name
 
     def _update_subtrees(self, sub_trees, item, flat = False):
         if flat:
-            sub_trees.extend(item)
+            sub_trees+=item
         else:
             sub_trees.append(item)
 
-
     def _parse(self, tokstream, sym, c, flat = False):
+        # TODO: explain the flat kwd argument. Show that it really helps
+        # parsing strings, names and comments.
         line, col = tokstream.current_pos()
         if sym in self.parser_terminals:
             flat = True
@@ -232,14 +245,13 @@ class NFALexer(object):
         c, selection = self._next_selection(cursor, sym, c, tokstream)
         if self.debug:
             self._dbg_info(selection, c, sym, "step")
-        sub_trees = self._init_subtrees(sym, flat)
+        sub_trees = self._init_subtrees(sym)
         charset = self.charset.charset
         while c:
             for s in selection:
-                if s not in (None, self.ANY, self.STOP):
+                if s not in (FIN, self.ANY, self.STOP):
                     if s in charset:
                         if c in charset[s]:
-                            line, col = tokstream.current_pos()
                             tokstream.shift_read_position()
                             self._store_token(sym, cursor, sub_trees, c, flat)
                             break
@@ -257,7 +269,7 @@ class NFALexer(object):
                     sub_trees.append([self.STOP, ''])
                     sub_trees = self._derive_tree(sym, cursor, sub_trees, flat)
                     break
-                elif None in selection:
+                elif FIN in selection:
                     sub_trees = self._derive_tree(sym, cursor, sub_trees, flat)
                     break
                 elif self.ANY in selection:
@@ -279,19 +291,18 @@ class NFALexer(object):
                     sub_trees.append([self.STOP, ''])
                     sub_trees = self._derive_tree(sym, cursor, sub_trees, flat)
                     break
-                elif None in selection or self.ENDMARKER in selection:
+                elif FIN in selection or self.ENDMARKER in selection:
                     sub_trees = self._derive_tree(sym, cursor, sub_trees, flat)
                     break
                 else:
                     line, col = tokstream.current_pos()
                     self._handle_error(sym, cursor, sub_trees, [self.ANY, c, line, col], selection)
                 c = None
-        if sym == self.UNIT:
+        if sym == self.UNIT and self.do_tokenize:
             return self._make_token(sub_trees, line, col)
         if flat:
             return [sym, sub_trees]
         return sub_trees
-
 
     def _getchars(self, lst):
         chars = []
@@ -303,6 +314,11 @@ class NFALexer(object):
         return chars
 
     def _make_token(self, unit, line, col):
+        # this function effectively turns NFALexer ( which is a parser, creating parse trees! )
+        # into a tokenizer. Trail is a two level parser where non-terminals of
+        # one parse are used as terminals of another parse - after some preparation step using
+        # _make_token
+        self.langlet.display.maybe_show_lexer_cst(unit)
         sub_unit = unit
         nids  = []
         chars = []
@@ -333,7 +349,6 @@ class NFALexer(object):
         else:
             return [nids[1], "".join(chars), line, col]
 
-
     def _scan(self, charstream, start_symbol = None):
         if start_symbol is None:
             start_symbol = self.start_symbol
@@ -342,34 +357,31 @@ class NFALexer(object):
         if charstream.position<len(charstream):
             line, col = charstream.current_pos()
             c = charstream.next()
-            s = "Failed to scan input '%s' at (line %d , column %d). \n"%(c,line,col)
-            raise LexerError(s, **{"token": c})
+            if self._filename:
+                s = "\n    Failed to scan input '%s' at (line %d , column %d) in file:\n    %s\n"%(c,line,col, self._filename)
+            else:
+                s = "Failed to scan input '%s' at (line %d , column %d). \n"%(c,line,col)
+            raise LexerError(s, **{"token": [self.ANY, c, line, col]})
         return tokstream
 
-    def scan(self, source, filename = ""):
+    def scan(self, source, filename = "", start_symbol = None):
         '''
-        @param source: source code to parse
+        @param source: source code to tokenize
         @return: a sequence of token
         '''
-        cst = self._scan(CharStream(source))
+        self._error = False
+        self._filename = filename
+        cst = self._scan(CharStream(source), start_symbol = start_symbol)
+        self._filename = None
         return cst
 
-
-def test2():
-    import cProfile as profile
-    source = open(__file__).read()
-    python = langscape.load_langlet("python")
-    f = lambda: python.tokenize(source)
-    profile.runctx("f()", globals(), locals())
-
-def test3():
-    import tokenize
-    import cProfile as profile
-    f = lambda: list(tokenize.generate_tokens(open(__file__).readline))
-    profile.runctx("f()", globals(), locals())
-
-
 if __name__ == '__main__':
+    grammar = langscape.load_langlet("ls_grammar")
     python = langscape.load_langlet("python")
-    print python.tokenize("'jjsk'")
+    import os
+    TokenGen = os.path.dirname(python.lex_nfa.__file__)+os.sep+"TokenGen.g"
+    grammar.parse(open(TokenGen).read())
+    import cProfile
+    f = lambda: python.tokenize("'j\nk'"*89)
+    cProfile.run("f()")
 

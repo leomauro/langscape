@@ -1,24 +1,25 @@
-# Module used to specify the token of token.
+# Module used to specify character sets of token.
 #
 # BaseLexerToken objects are prototypes. They can be copied and customized
 # in lex_token.py modules
 
 import string
 import copy
+from langscape.util.univset import Any, White, Alpha, Digit
 
-class AnyObject(object):
+class AnyObject:
     pass
 
 BaseLexerToken          = AnyObject()
 BaseLexerToken.charset  = AnyObject()
 BaseLexerToken.tokenid  = AnyObject()
 BaseLexerToken.default  = AnyObject()
+BaseLexerToken.auxiliar = AnyObject()
 
 #
-# tokenid token ( for use in Token and Token.ext )
+# tokenid token ( for use in Token )
 #
-# functional lexer token without corresp. charset
-# ( used by Python )
+# functional lexer token without corresponding charset
 
 BaseLexerToken.tokenid.T_ENDMARKER   = 1
 BaseLexerToken.tokenid.T_INDENT      = 2
@@ -50,8 +51,6 @@ BaseLexerToken.tokenid.A_BACKSLASH   = 16
 BaseLexerToken.tokenid.ANY           = 17
 BaseLexerToken.tokenid.A_NON_NULL_DIGIT = 18
 BaseLexerToken.tokenid.STOP    = 19
-BaseLexerToken.tokenid.A_WORD  = 20
-BaseLexerToken.tokenid.A_ESCAPE  = 21
 
 # functional lexer token without corresp. charset
 # ( not used by Python )
@@ -65,17 +64,27 @@ BaseLexerToken.tokenid.T_APP_5 = 35
 
 # charsets
 BaseLexerToken.charset.A_LINE_END       = set(map(chr,[10, 13]))         # '\n\r'
-BaseLexerToken.charset.A_CHAR           = set(string.ascii_letters+"_")  # a-zA-Z_
+BaseLexerToken.charset.A_CHAR           = set(string.letters)|set("_")
 BaseLexerToken.charset.A_WHITE          = set(string.whitespace)         # '\t\n\x0b\x0c\r '
 BaseLexerToken.charset.A_HEX_DIGIT      = set(string.hexdigits)          # 0-9a-fA-F
 BaseLexerToken.charset.A_OCT_DIGIT      = set(string.octdigits)          # 0-7
 BaseLexerToken.charset.A_NON_NULL_DIGIT = set('123456789')               # 1-9
 BaseLexerToken.charset.A_DIGIT          = set(string.digits)             # 0-9
 BaseLexerToken.charset.A_BACKSLASH      = set(['\\'])
+
+# charsets which are treated special by the NFALexer
 BaseLexerToken.charset.ANY              = set()
 BaseLexerToken.charset.STOP             = set()
-BaseLexerToken.charset.A_WORD           = set()
-BaseLexerToken.charset.A_ESCAPE         = set()
+
+# auxiliary strings created by the prelexer
+BaseLexerToken.auxiliar.AUX_S1          = '\x01'*3
+BaseLexerToken.auxiliar.AUX_S2          = '\x02'*3
+BaseLexerToken.auxiliar.AUX_S3          = '\x03'*3
+BaseLexerToken.auxiliar.AUX_S4          = '\x04'*3
+BaseLexerToken.auxiliar.AUX_S5          = '\x05'*3
+BaseLexerToken.auxiliar.AUX_S6          = '\x06'*3
+BaseLexerToken.auxiliar.AUX_S7          = '\x07'*3
+BaseLexerToken.auxiliar.AUX_S8          = '\x08'*3
 
 
 def NewLexerToken(langlet_id):

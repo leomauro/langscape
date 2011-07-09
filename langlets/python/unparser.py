@@ -7,4 +7,3 @@ class LangletUnparser(BaseClass("Unparser", parent_langlet)):
     '''
     Defines langlet specific unparsing / formatting.
     '''
-

@@ -5,12 +5,16 @@ __all__ = ["ParserGrammar", "LexerGrammar", "SymbolObject", "ParserObject", "fin
 import pprint
 import re
 import langscape
+import binascii
 
 from langscape.util.path import path
-from langscape.util import more_recent
+from langscape.ls_const import*
 from langscape.base.display import DisplayMixin
+from langscape.base.loader import find_langlet, load_langlet
 
-alphanum = re.compile("\w")
+p_alphanum = re.compile("\w")
+p_parent   = re.compile("parent_langlet.+?(?P<name>\\w+)")
+
 
 class LineList:
     """
@@ -106,13 +110,15 @@ class GrammarRuleGenerator(object):
 
 
 class GrammarUpdater(object):
-    def __init__(self, langlet_name, pth, options = {}):
-        self.grammar_gen  = GrammarRuleGenerator()
-        self.langlet_name = langlet_name
-        self.recreate     = options.get("build_nfa")
-        self.pth_langlet  = self.langlet_path(pth)
-        self.langlet_id   = self.read_langlet_id()
-        self.offset       = self.read_offset()
+    def __init__(self, langlet_name, pth, options = None):
+        options = options or {}
+        self.grammar_gen   = GrammarRuleGenerator()
+        self.langlet_name  = langlet_name
+        self.build_langlet = options.get("build_langlet")
+        self.pth_langlet   = self.langlet_path(pth)
+        self.langlet_id    = self.read_langlet_id()
+        self.offset        = self.read_offset()
+        self.compute_checksums()
 
     def langlet_path(self, pth):
         base = pth = path(pth).dirname()
@@ -131,18 +137,59 @@ class GrammarUpdater(object):
                 return int(line.split("LANGLET_ID = ")[1])
         raise RuntimeError("LANGLET_ID not found")
 
+    def compute_checksums(self):
+        with open(self.grammar_base_path()) as f:
+            self.base_cs = binascii.crc32(f.read())
+        with open(self.grammar_ext_path()) as f:
+            self.gen_cs = binascii.crc32(f.read(), self.base_cs)
+
     def track_change(self):
-        if self.langlet_name == "ls_grammar":  # don't update grammar automatically!
+        if self.langlet_name == "ls_grammar":  # don't update ls_grammar automatically!
             return False
-        pth_nfa = self.nfa_path()
-        pth_sym = self.symbol_path()
-        if more_recent(self.grammar_base_path(), pth_nfa) or \
-                more_recent(self.grammar_ext_path(), pth_nfa) or \
-                self.recreate or \
-                pth_sym.size<10:
+        if self.track_parent():
             return True
+        if self.build_langlet:
+            return True
+        cs_cmp = self.gen_cs != self.read_checksum()
+        return cs_cmp
+
+    def read_checksum(self, typ = "gen"):
+        if typ == "gen":
+            pth  = self.grammar_gen_path()
         else:
-            return False
+            pth  = self.grammar_base_path()
+        if pth.isfile():
+            with open(pth) as f:
+                line = f.readline()
+                if line.startswith("# base+ext checksum:"):
+                    cs = int(line.split(":")[-1].strip())
+                    return cs
+        return 0
+
+    def get_parent(self):
+        with open(self.pth_langlet.joinpath("langlet_config.py")) as f:
+            source = f.read()
+            m = p_parent.search(source)
+            parent_name = m.group("name") if m else ''
+            if parent_name:
+                parent_path, m = find_langlet(parent_name)
+                return parent_name, m.__file__
+        return '', ''
+
+    def track_parent(self):
+        parent_name, parent_path = self.get_parent()
+        if parent_name and parent_name!="ls_grammar":
+            options = {"build_langlet": True}
+            parent_updater = self.__class__(parent_name, parent_path, options)
+            if parent_updater.track_change():
+                load_langlet(parent_name)
+            base_cs = self.read_checksum(typ = "base")
+            if base_cs!=parent_updater.gen_cs:
+                parent_updater.grammar_gen_path().copy(self.grammar_base_path())
+                self.compute_checksums()
+                return True
+        return False
+
 
     def load_grammar(self):
         '''
@@ -167,9 +214,9 @@ class GrammarUpdater(object):
 
     def _merge_ext(self):
         '''
-        Create a new set of lines reading Grammar + Grammar.ext.
-        If Grammar.ext contains a rule R of the same name as Grammar replace R of
-        Grammar with R of Grammar.ext
+        Create a new set of lines reading GrammarBase.g + GrammarExt.g
+        If GrammarExt.g contains a rule R of the same name as Grammar replace R of
+        Grammar with R of GrammarExt.g
         '''
         global_lines = open(self.grammar_base_path()).readlines()
         ext_lines    = open(self.grammar_ext_path()).read().splitlines()
@@ -199,6 +246,7 @@ class GrammarUpdater(object):
 
     def write_merged_grammar(self, grammar):
         with open(self.grammar_gen_path(),"w") as G:
+            print >>G, "# base+ext checksum: "+str(self.gen_cs)+"\n"
             for l in grammar:
                 l = self.post_process_line(l)
                 print >> G, l
@@ -261,22 +309,25 @@ class GrammarUpdater(object):
 
 class ParserGrammar(GrammarUpdater, DisplayMixin):
     '''
-    Class used to handle creation / updates of Grammar.base + Grammar.ext specific files ::
+    Class used to handle creation / updates of GrammarBase + GrammarExt specific files ::
 
             parse_symbol.py
             parse_nfa.py
     '''
     def read_offset(self):
-        return 1000
+        return SYMBOL_OFFSET
 
     def grammar_gen_path(self):
         return self.pth_langlet.joinpath("parsedef","GrammarGen.g")
 
     def grammar_ext_path(self):
-        return self.pth_langlet.joinpath("parsedef","Grammar.ext")
+        return self.pth_langlet.joinpath("parsedef","GrammarExt.g")
 
     def grammar_base_path(self):
         return self.pth_langlet.joinpath("parsedef","GrammarBase.g")
+
+    def grammar_gen_path(self):
+        return self.pth_langlet.joinpath("parsedef","GrammarGen.g")
 
     def nfa_path(self):
         return self.pth_langlet.joinpath("parsedef","parse_nfa.py")
@@ -295,7 +346,7 @@ class ParserGrammar(GrammarUpdater, DisplayMixin):
 
 class LexerGrammar(GrammarUpdater, DisplayMixin):
     '''
-    Class used to handle creation / updates of Token.base + Token.ext specific files ::
+    Class used to handle creation / updates of TokenBase + TokenExt specific files ::
 
             lex_symbol.py
             lex_nfa.py
@@ -305,16 +356,19 @@ class LexerGrammar(GrammarUpdater, DisplayMixin):
             parse_token.py
     '''
     def read_offset(self):
-        return 1000
+        return SYMBOL_OFFSET
 
     def grammar_gen_path(self):
         return self.pth_langlet.joinpath("lexdef", "TokenGen.g")
 
     def grammar_ext_path(self):
-        return self.pth_langlet.joinpath("lexdef", "Token.ext")
+        return self.pth_langlet.joinpath("lexdef", "TokenExt.g")
 
     def grammar_base_path(self):
         return self.pth_langlet.joinpath("lexdef", "TokenBase.g")
+
+    def grammar_gen_path(self):
+        return self.pth_langlet.joinpath("lexdef","TokenGen.g")
 
     def nfa_path(self):
         return self.pth_langlet.joinpath("lexdef","lex_nfa.py")
@@ -335,7 +389,7 @@ class LexerGrammar(GrammarUpdater, DisplayMixin):
 
     def post_process_line(self, line):
         '''
-        Rules in Token.base + Token.ext may contain strings of the kind ::
+        Rules in TokenBase + TokenExt may contain strings of the kind ::
 
             R: A B 'xyz' C
 
@@ -417,7 +471,7 @@ class LexerGrammar(GrammarUpdater, DisplayMixin):
             print >> fPToken
             inv_tok_map = {}
             for s, i in new_tok_map.items():
-                if alphanum.search(s) is None:
+                if p_alphanum.search(s) is None:
                     inv_tok_map[i] = s
             print >> fPToken
             print >> fPToken, "symbol_map = "+pprint.pformat(inv_tok_map, width=120)
@@ -432,7 +486,7 @@ class LexerGrammar(GrammarUpdater, DisplayMixin):
 
 
 class _RulesObject(object):
-    def __init__(self, langlet_id, offset = 1000):
+    def __init__(self, langlet_id, offset = SYMBOL_OFFSET):
         self._langlet_id = langlet_id
         self._offset  = offset
         self.tok_name = {}
@@ -452,21 +506,21 @@ class SymbolObject(_RulesObject):
             self.sym_name[value] = name
         self.tok_name = self.sym_name
         self.__dict__.update(symbols)
-        if self._offset == 0:
+        if self._offset < SYMBOL_OFFSET:
             self.add_maps(grammar_lines)
 
     def add_maps(self, grammar_lines):
         token_map = {}
         symbol_map = {}
         rule_gen  = GrammarRuleGenerator()
-        rules = rule_gen.create_rules()
-        for i,ext,rule in sorted(rules.values()):
+        rules = rule_gen.create_rules(grammar_lines)
+        for i, ext, rule in sorted(rules.values()):
             rhs = rule[rule.index(":")+1:].strip()
             r = "".join(rhs.split())
             r = "".join(r.split("'"))
-            token_map[r] = i+self._langlet_id
-            if alphanum.search(r) is None:
-                symbol_map[i+self._langlet_id] = rule
+            token_map[r] = i+self._langlet_id-1+self._offset
+            if p_alphanum.search(r) is None:
+                symbol_map[i+self._langlet_id-1+self._offset] = rule
         setattr(self, "token_map", token_map)
         setattr(self, "symbol_map", symbol_map)
 

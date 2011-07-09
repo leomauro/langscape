@@ -1,5 +1,4 @@
-#from langscape.util import psyco_optimized
-from langscape.trail.nfadef import*
+from langscape.ls_const import*
 import langscape.util
 
 __all__ = ["TreeBuilder", "NFAStateSetSequence", "NFACursor", "SimpleNFACursor"]
@@ -17,11 +16,11 @@ class NFAState:
         '''
         self.state  = state
         self.follow = follow
-        self.token  = tok
 
-    def __repr__(self):
-        return "State(%s ; %s)"%(self.state, self.token)
-
+class NFAStates:
+    def __init__(self, nfastates):
+        self.nfastates = nfastates
+        self.token = None
 
 class TreeBuilder(object):
     '''
@@ -38,7 +37,7 @@ class TreeBuilder(object):
             link = state[-1]
             IDX  = state[1]
 
-            if IDX == SKIP:
+            if IDX == TRAIL_SKIP:
                 rule.pop()
                 for i in xrange(len(tree)-1, -1, -1):
                     if tree[i] == nid:
@@ -76,7 +75,7 @@ class TreeBuilder(object):
                             break
                 else:
                     raise ValueError("Failed to derive tree. Cannot build node [%s, ...]"%root)
-            elif nid is None:
+            elif nid is FIN:
                 if cycle:
                     raise ValueError("Failed to derive tree. Cannot build node [%s, ...]"%root)
                 if type(tree[0]) == int:
@@ -99,7 +98,7 @@ class TreeBuilder(object):
                         raise ValueError("No sub-tree available")
         else:
             if len(states)>1:
-                raise ValueError("Exit label `(None, ..)` missing in: %s"%states)
+                raise ValueError("Final state `(FIN, ..)` missing in: %s"%states)
             else:
                 raise ValueError("No trace available")
 
@@ -109,12 +108,12 @@ class NFAStateSetSequence:
         # print "DEBUG - start", start
         self.start  = start
         self.states = []
-        self.new_states = []
+        self.new_states = {}
         self.builder = builder
 
     def reset(self):
         self.states = []
-        self.new_states = []
+        self.new_states = {}
 
     def clone(self):
         '''
@@ -122,21 +121,22 @@ class NFAStateSetSequence:
         '''
         mt = NFAStateSetSequence(self.start, self.builder)
         mt.states = self.states[:]
-        mt.new_states = self.new_states[:]
+        mt.new_states = self.new_states.copy()
         return mt
 
     def set_token(self, tok):
-        for state in self.states[-1]:
-            state.token = tok
+        nfastates = self.states[-1]
+        nfastates.token = tok
 
-    def update(self, state, follow):
-        self.new_states.append(NFAState(state, follow))
+    def update(self, nfastates):
+        self.new_states.update(nfastates)
 
     def commit(self):
-        self.states.append(self.new_states)
-        self.new_states = []
+        self.states.append(NFAStates(self.new_states))
+        # reset and wait for new updates
+        self.new_states = {}
 
-    def unwind(self, trace_stop=0):
+    def compute_state_sequence(self):
         '''
         We iterate the list of state sets as follows ::
 
@@ -144,38 +144,31 @@ class NFAStateSetSequence:
             If there is an ``N0`` in ``prev`` and an F in ``N0.follow`` with ``F[-1] == S`` we can
             link ``N0`` with ``N1`` by means of F.
 
-        :param trace_stop: stops state set unwinding after ``trace_stop`` steps. If ``trace_stop`` is
-                           0 no stop is applied.
         '''
         trace = []
-        trace.append([(None, '-', self.states[0][0].state[0]),[]])
-        S = trace[0][0]
-        while self.states:
-            prev = self.states.pop()
-            for P in prev:
-                for F in P.follow:
-                    if S == F[-1]:
-                        if P.token:                  # re-link token from predecessor
-                            trace[-1][1] = P.token
-                        if len(F)>1:
-                            trace+=[[f,[]] for f in F[:-1][::-1]]
-                        trace.append([P.state, []])
-                        S = P.state
-                        break
-                else:
-                    continue
-                break
-            else:
+        nfastates = self.states[0]
+        nid = nfastates.nfastates.itervalues().next().state[0]
+        S = (FIN, FEX, nid)
+        trace.append([S,[]])
+        for prev in self.states[::-1]:
+            try:
+                P = prev.nfastates[S]
+                if P:
+                    if prev.token:     # re-link token from predecessor
+                        trace[-1][1] = prev.token
+                    if len(P.follow)>1:
+                        trace.extend([[f,[]] for f in P.follow[1:]])
+                    trace.append([P.state, []])
+                    S = P.state
+            except KeyError:
                 raise IncompleteTraceError
-            if trace_stop and len(trace)>=trace_stop:
-                break
         return trace[::-1]
 
     def derive_tree(self, sub_trees):
         '''
         Derives parse tree fragment from statelist and sub trees.
         '''
-        states = self.unwind()
+        states = self.compute_state_sequence()
         return self.builder.create(states, sub_trees)
 
 
@@ -199,11 +192,10 @@ class NFACursor:
            |   <-----------     |
            |    CST             |
            |   ----------->     |
-
     '''
+    cache  = {}
     def __init__(self, nfa, mtrace):
         self.nfa = nfa
-        self.cache  = {}
         self.mtrace = mtrace
         self.transitions = nfa[2]
         self.stateset   = set([mtrace.start])
@@ -215,11 +207,10 @@ class NFACursor:
 
     def clone(self):
         # Creates a clone of the NFACursor. Used for backtracking.
-        cursor = NFACursor(self.nfa)
+        mtrace = self.mtrace.clone()
+        cursor = NFACursor(self.nfa, mtrace)
         cursor.stateset = set()
         cursor.stateset.update(self.stateset)
-        cursor.mtrace = self.mtrace.clone()
-        cursor.cache = self.cache
         return cursor
 
     def derive_tree(self, sub_trees):
@@ -231,42 +222,42 @@ class NFACursor:
         self.mtrace.set_token(tok)
 
     def move(self, nid):
+        '''
+        For a given set of states and nid the follow states corresponding to that nid
+        is determined i.e. the joint follow sets of states with that nid.
+        '''
         next_stateset = set()
         for state in self.stateset:
             if state[0] == nid:
-                follow = self.cache.get(state)
-                if follow is None:
+                nfastates = self.cache.get(state, {})
+                if not nfastates:
                     follow = self.follow_states(state)
-                    self.cache[state] = follow
-                self.mtrace.update(state, follow)
-                for F in follow:
-                    next_stateset.add(F[-1])
+                    for F in follow:
+                        nfastates[F[0]] = NFAState(state, F)
+                    self.cache[state] = nfastates
+                self.mtrace.update(nfastates)
+                next_stateset.update(nfastates.keys())
         self.mtrace.commit()
         self.stateset = next_stateset
         return set([s[0] for s in next_stateset])
 
-    @langscape.util.psyco_optimized
+
     def follow_states(self, state):
+        '''
+        Computes a list F of follow states of a given state S.
+        '''
+        # this looks like we are doing too much because not all possible
+        # transitions have to be considered. But since we have to examine
+        # skipped states, it is not avoidable. On the bonus side: the
+        # function is pure and its value can be cached.
         follow = []
         for S in self.transitions[state]:
-            if S[1] in CONTROL:
+            if S[1] in TRAIL_CONTROL:
                 for F in self.follow_states(S):
-                    follow.append([S]+F)
+                    follow.append(F+[S])
             else:
                 follow.append([S])
         return follow
-
-    def remove_state(self, nid, link = 0):
-        '''
-        This method is used for state set "surgery".
-        '''
-        for S in list(self.stateset):
-            if S[0] == nid:
-                if link:
-                    if S[-1] == link:
-                        self.stateset.remove(S)
-                else:
-                    self.stateset.remove(S)
 
 
 class SimpleNFACursor(NFACursor):
@@ -281,7 +272,6 @@ class SimpleNFACursor(NFACursor):
         if start is None:
             start = nfa[1]
         self.stateset   = set([start])
-        self.cache = {}
         self.mtrace = mtrace
 
     def reset(self):
@@ -291,7 +281,6 @@ class SimpleNFACursor(NFACursor):
         cursor = SimpleNFACursor(self.nfa)
         cursor.stateset = set()
         cursor.stateset.update(self.stateset)
-        cursor.cache = self.cache
         return cursor
 
     def move(self, nid):

@@ -1,13 +1,12 @@
-# URL:     http://www.fiber-space.de
-# Author:  Kay Schluehr <easyextend@fiber-space.de>
-# Date:    10 May 2006
-
 #
 #  Collection of exceptions used by Langscape
 #
 #  Langscape inserts the exception classes directly into the __builtin__ superglobals.
 
 class ParserError(Exception):
+    """
+    Exception class for parser errors.
+    """
     def __init__(self, **kwd):
         self.__dict__.update(**kwd)
         self.value = self.formatter()
@@ -18,6 +17,11 @@ class ParserError(Exception):
 class IncompleteTraceError(Exception):
     """
     Exception raised when node trail cannot be completed.
+    """
+
+class GrammarError(Exception):
+    """
+    Exception raised when invalid grammar is detected.
     """
 
 class LexerError(Exception):
@@ -33,18 +37,13 @@ class LexerError(Exception):
 
 class NodeCycleError(Exception):
     """
-    Exception class for node cycles N < ...<A<N.
+    Exception class for node inclusion cycles N < ...<A<N.
     """
 
 class TranslationError (Exception):
     """
     Exception class for translation failures.
     """
-
-class TokenError(Exception):
-    '''
-    Exception class for tokenization failures.
-    '''
 
 class NonSelectableError(Exception):
     '''

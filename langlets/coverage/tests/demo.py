@@ -17,7 +17,6 @@ class Demo:
     def f(self):
         return 0
 
-
 if __name__ == '__main__':
     Demo(0,0)
     d = Demo(1.1,0)

@@ -1,5 +1,5 @@
 '''
-nfagen module. Used to create characterstic finite automata for grammar rules
+nfagen module. Used to create characterstic finite automata of grammar rules
 '''
 __all__ = ["create_lex_nfa",
            "create_parse_nfa",
@@ -11,17 +11,22 @@ __all__ = ["create_lex_nfa",
 
 import pprint
 
-import langscape
-import langscape.util
-import langscape.trail.nfaexpansion as nfaexpansion
-from langscape.trail.nfadef import*
+# Set USE_EE = True if you want to modify the rules of ls_grammar. Alternatively, you can copy
+# ls_grammar, modify it, until it works and finally replace ls_grammar by that copy.
+#
+# Caution: NEVER simply edit the lexer or grammar files of ls_grammar because this will break
+#          langscape.
+#
 
 USE_EE = False
 
+import langscape
+import langscape.util
+import langscape.trail.nfaexpansion as nfaexpansion
+from langscape.csttools.cstutil import*
+
+
 if USE_EE:
-    # This is used for ls_grammar updates only
-    # Install EasyExtend 3 if you intend to modify the basic
-    # EBNF grammar used by langscape
     from EasyExtend.langlets.grammar_langlet.rules import*
 else:
     from langscape.langlets.ls_grammar.rules import*
@@ -40,7 +45,7 @@ class NFAData:
          self.terminals    = set()    # terminals of the grammar
          self.nonterminals = set()    # non-terminals of the grammar
          self.symbols_of   = {}       # T and NT found in rule
-         self.expansion_target = {}   # rules before expansion
+         self.expanded     = {}       # rules before expansion
          self.depths = {}             # rule depth
          self.fin_cycles = {}         # -> see compute_fin_cycles()
          self.last_set = {}           # first-set dual
@@ -59,7 +64,6 @@ class NFAData:
             self.keywords
         '''
         assert self.used_symbols
-        #assert self.keywords
 
         for s in list(self.used_symbols):
             if s in self.keywords:
@@ -79,7 +83,7 @@ class NFAData:
         '''
         self.used_symbols = set()  # reset
         for k, nfa in self.nfas.items():
-            S = set([label[0] for label in nfa[2]]) - set([None, k])
+            S = set([state[0] for state in nfa[2]]) - set([FIN, k])
             self.used_symbols.update(S)
             self.symbols_of[k] = S
 
@@ -95,7 +99,7 @@ class NFAData:
         pre = []
         for L, T in transitions.items():
             if label in T:
-                if L[1] in CONTROL:
+                if L[1] in TRAIL_CONTROL:
                     pre+=self.compute_predecessor(nfa, L)
                 else:
                     pre.append(L)
@@ -126,7 +130,7 @@ class NFAData:
         Required ::
             self.last_set
         Description ::
-            Let K be a non-terminal and Esc = Pre((None, '-', K)) the set of states that can escape
+            Let K be a non-terminal and Esc = Pre((FIN, FEX, K)) the set of states that can escape
             the NFA of K. The transitions of Esc shall be denoted by Next(Esc). Now consider the set
             BaseFinCycle(K) = nids-of ( Next(Esc) /\ Esc ).
 
@@ -148,11 +152,11 @@ class NFAData:
         fin_cycles = {}
         for r, nfa in self.nfas.items():
             T = set()
-            fin_set = set(self.compute_predecessor(nfa, (None, '-', r)))
+            fin_set = set(self.compute_predecessor(nfa, (FIN, FEX, r)))
             transitions = nfa[2]
             for L in fin_set:
                 T.update(transitions[L])
-            fin_cycles[r] = set([L[0] for L in (fin_set & T) if L[0]!=None])
+            fin_cycles[r] = set([L[0] for L in (fin_set & T) if L[0]!=FIN])
 
         visited = set()
         def compute_fin_set(r):
@@ -178,7 +182,7 @@ class NFAData:
         Required ::
             None
         Description ::
-            Let K be a non-terminal and Esc = Pre((None, '-', K)) the set of labels that can escape
+            Let K be a non-terminal and Esc = Pre((FIN, FEX, K)) the set of labels that can escape
             the NFA of K. We define BaseLastSet(K) = nids-of ( Esc ) and then recursively
 
                  LastSet(K) = \/ (LastSet(s)) \/ BaseLastSet(K)
@@ -190,7 +194,7 @@ class NFAData:
 
         def end_trans(r):
             nfa = self.nfas[r]
-            labels = self.compute_predecessor(nfa, (None, '-', r))
+            labels = self.compute_predecessor(nfa, (FIN, FEX, r))
             return set([L[0] for L in labels])
 
         end_transitions = {}
@@ -251,7 +255,7 @@ class NFAData:
                 raise NodeCycleError, "Immediate left recusion in grammar detected at node %s. Trail can't build parse tables."%NT
             visited.add(NT)
             nfa = self.nfas[NT]
-            selection = set([s[0] for s in self.compute_successor(nfa, (NT,0,NT)) if s[0]!=None])
+            selection = set([s[0] for s in self.compute_successor(nfa, (NT,0,NT)) if s[0]!=FIN])
             self.reachables[NT] = set()
             for s in selection:
                 if not is_token(s) and s!=NT:
@@ -445,8 +449,10 @@ def build_nfa(rule, start = None, nfa = None):
 def nfa_reduction(nfa):
     removable = []
     for (K, idx) in nfa:
-        if K is None and idx!="-":
+        if K is FIN and idx!=FEX:
             F = nfa[(K, idx)]
+            if (K, idx) in F:
+                F.remove((K, idx))
             for follow in nfa.values():
                 if (K, idx) in follow:
                     follow.remove((K, idx))
@@ -480,16 +486,30 @@ class NFAGenerator(object):
         self.kwd_index = langlet.langlet_id + KEYWORD_OFFSET
 
     def from_ebnf(self, ebnf_str, default = 0):
+        self.load_symbols()
         rules = parse_grammar(ebnf_str)
         for rule_name, (rule, ebnf) in rules.items():
             table  = nfa_reduction(build_nfa(rule))
             r, nfa = self.insert_nids(rule_name, table, default)
             return [ebnf.strip(), (r, 0, r), nfa]
+        else:
+            raise ValueError("Could not parse string '%s' into grammar rule"%ebnf_str)
+
+    def load_symbols(self):
+        if self.langlet.symbol is None:
+            self.langlet._load_symbols()
+        if self.parser_type == "Parser":
+            self.token  = self.langlet.parse_token
+            self.symbol = self.langlet.parse_symbol
+        elif self.parser_type == "Lexer":
+            self.token  = self.langlet.lex_token
+            self.symbol = self.langlet.lex_symbol
 
     def create_all(self, source):
         '''
         Creates all nfas for an existing langlet.
         '''
+        self.load_symbols()
         rules = parse_grammar(source)
         for rule_name, (rule, ebnf) in rules.items():
             nfa = build_nfa(rule)
@@ -505,12 +525,12 @@ class NFAGenerator(object):
     def insert_nids(self, rule_name, table, default = None):
         def map_state(state, nid):
             name = state[0]
-            if name is None:
-                return (None, "-", nid)
+            if name is FIN:
+                return (FIN, FEX, nid)
             elif name[0] in ("'", '"'):
                 name = name[1:-1]
                 self.used_strings.add(name)
-            S = self.get_nid(name, symbol, token)
+            S = self.get_nid(name)
             if type(S)!=int:
                 k = self.keywords.get(S)
                 if k is None:
@@ -520,26 +540,19 @@ class NFAGenerator(object):
                 return (k, state[1], nid)
             else:
                 return (S, state[1], nid)
-
-        if self.parser_type == "Parser":
-            token  = self.langlet.parse_token
-            symbol = self.langlet.parse_symbol
-        elif self.parser_type == "Lexer":
-            token  = self.langlet.lex_token
-            symbol = self.langlet.lex_symbol
-
-        nid = self.get_nid(rule_name, symbol, token, default)
+        nid = self.get_nid(rule_name, default)
         nfa = {}
         for state, follow in table.items():
-            nfa[map_state(state, nid)] = [map_state(F, nid) for F in follow]
+            S = set(map_state(F, nid) for F in follow)
+            nfa[map_state(state, nid)] = list(S)
         return nid, nfa
 
-    def get_nid(self, item, symbol, token, default = None):
+    def get_nid(self, item, default = None):
         default = default if default else item
-        nid = symbol.__dict__.get(item)
+        nid = self.symbol.__dict__.get(item)
         if nid is not None:
             return nid
-        nid = token.token_map.get(item) or token.__dict__.get(item)
+        nid = self.token.token_map.get(item) or self.token.__dict__.get(item)
         if nid is not None:
             return nid
         else:
@@ -559,16 +572,21 @@ class NFAGenerator(object):
             from langscape.trail.nfatools import compute_constants
             self.nfadata.constants = compute_constants(self.nfadata.nfas, self.langlet.lex_token, flip(self.nfadata.keywords))
 
-    def expand_nfas(self, report = True, check_right_expand = True):
+    def expand_nfas(self, report = True, check_first_follow_conflict = True):
+        if report:
+            if self.parser_type == "Parser":
+                print "\n*** %s.parsedef generation of GrammarGen.g + parse_nfa.py  ===>"%self.langlet.config.langlet_name
+            else:
+                print "\n*** %s.lexdef generation of TokenGen.g + lex_nfa.py  ===>"%self.langlet.config.langlet_name
         if self.parser_type == "Lexer":
             nfaexp = nfaexpansion.NFAExpansionLexer(self.langlet, self.nfadata)
         else:
             nfaexp = nfaexpansion.NFAExpansionParser(self.langlet, self.nfadata)
         if report is False:
-            nfaexp.report = nfaexpansion.AbstractExpansionStatusReport()
+            nfaexp.report = nfaexpansion.SuppressExpansionMessagesReport()
         nfaexp.expand_all()
-        if check_right_expand:
-            nfaexp.check_rightexpand()
+        if check_first_follow_conflict:
+            nfaexp.check_first_follow_conflict()
 
     def write_to_file(self):
         from langscape.util.path import path
@@ -586,43 +604,43 @@ class NFAGenerator(object):
         print >> fPyTrans, "# LANGLET ID\n"
         print >> fPyTrans, "LANGLET_ID = %s"%self.langlet.langlet_id
         print >> fPyTrans
-        print >> fPyTrans, "from langscape.util.univset import ANY\n"
+        print >> fPyTrans, "from langscape.util.univset import*\n"
         print >> fPyTrans
         print >> fPyTrans, "# trail NFAs:"
         print >> fPyTrans
-        print >> fPyTrans, "nfas = "+pprint.pformat(self.nfadata.nfas)
+        print >> fPyTrans, "nfas = "+pprint.pformat(self.nfadata.nfas, width = 80)
         print >> fPyTrans
         print >> fPyTrans, "# expansion targets:"
         print >> fPyTrans
-        print >> fPyTrans, "expanded  = "+pprint.pformat(self.nfadata.expansion_target, width=120)
+        print >> fPyTrans, "expanded  = "+pprint.pformat(self.nfadata.expanded, width = 240)
         print >> fPyTrans
         print >> fPyTrans, "# reachables:"
         print >> fPyTrans
-        print >> fPyTrans, "reachables = "+pprint.pformat(self.nfadata.reachables, width=120)
+        print >> fPyTrans, "reachables = "+pprint.pformat(self.nfadata.reachables, width = 340)
         print >> fPyTrans
         print >> fPyTrans, "# terminals:"
         print >> fPyTrans
-        print >> fPyTrans, "terminals  = "+pprint.pformat(self.nfadata.terminals, width=120)
+        print >> fPyTrans, "terminals  = "+pprint.pformat(self.nfadata.terminals, width = 240)
         print >> fPyTrans
         print >> fPyTrans, "# terminal ancestors:"
         print >> fPyTrans
-        print >> fPyTrans, "ancestors  = "+pprint.pformat(self.nfadata.ancestors, width=120)
+        print >> fPyTrans, "ancestors  = "+pprint.pformat(self.nfadata.ancestors, width = 340)
         print >> fPyTrans
         print >> fPyTrans, "# last set:"
         print >> fPyTrans
-        print >> fPyTrans, "last_set  = "+pprint.pformat(self.nfadata.last_set, width=120)
+        print >> fPyTrans, "last_set  = "+pprint.pformat(self.nfadata.last_set, width = 340)
         print >> fPyTrans
         print >> fPyTrans, "# symbols of:"
         print >> fPyTrans
-        print >> fPyTrans, "symbols_of  = "+pprint.pformat(self.nfadata.symbols_of, width=120)
+        print >> fPyTrans, "symbols_of  = "+pprint.pformat(self.nfadata.symbols_of, width = 240)
         print >> fPyTrans
         print >> fPyTrans, "# keywords:"
         print >> fPyTrans
-        print >> fPyTrans, "keywords  = "+pprint.pformat(self.nfadata.keywords, width=120)
+        print >> fPyTrans, "keywords  = "+pprint.pformat(self.nfadata.keywords)
         print >> fPyTrans
         print >> fPyTrans, "# start symbols:"
         print >> fPyTrans
-        print >> fPyTrans, "start_symbols  = "+pprint.pformat(self.nfadata.start_symbols, width=120)
+        print >> fPyTrans, "start_symbols  = "+pprint.pformat(self.nfadata.start_symbols)
         print >> fPyTrans
 
 
@@ -637,12 +655,6 @@ class NFAGenerator(object):
             print >> fPyTrans
 
         fPyTrans.close()
-
-        if self.parser_type == "Parser":
-            print "*** GrammarGen.g + parse_nfa.py generated in %s.parsedef\n"%self.langlet.config.langlet_name
-        else:
-            print "*** TokenGen.g + lex_nfa.py generated in %s.lexdef\n"%self.langlet.config.langlet_name
-
         return self.nfadata.nfas
 
 def create_nfa_from_source(langlet, source, parser_type = "Parser"):
@@ -668,13 +680,14 @@ def create_nfa(langlet, parser_type = "Parser"):
 
 
 def test1():
-    grammar = """
-    print_stmt: 'print' ( [ test (',' test)* [','] ] |
-                      '>>' test [ (',' test)+ [','] ] )
-    """
+    grammar = "R: d | a | [ d | [ e ] ]"
+
     rules = parse_grammar(grammar)
     rule  = rules.values()[0][0]
     print rule
+    print "-"*60
+    pprint.pprint( build_nfa(rule) )
+    print "-"*60
     pprint.pprint( nfa_reduction(build_nfa(rule)))
 
 def test2():
@@ -701,7 +714,6 @@ def test2():
                 break
 
 def test3():
-    "print_stmt : 'print' ( [test (',' test )* [',' ] ]| '>>' test [ (',' test )+ [',' ] ] )"
     import langscape
     langlet = langscape.load_langlet("python")
     nfagen = NFAGenerator(langlet)
@@ -710,5 +722,5 @@ def test3():
 
 
 if __name__ == '__main__':
-    test3()
+    test1()
 

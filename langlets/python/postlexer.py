@@ -3,8 +3,13 @@
 from langlet_config import parent_langlet
 from langscape.base.postlexer import postlex
 from langscape.base.loader import BaseClass
-from langscape.trail.nfadef import INTRON_NID
 from langscape.ls_const import*
+
+class LangletPrelexer(BaseClass("Prelexer", parent_langlet)):
+    '''
+    Defines a langlet specific preprocessor for the tokenizer.
+    '''
+
 
 class LangletPostlexer(BaseClass("Postlexer", parent_langlet)):
     '''
@@ -66,28 +71,37 @@ class LangletPostlexer(BaseClass("Postlexer", parent_langlet)):
                  return
             line, col = tok[2], tok[3]
             _indent = 0
+            _linecont = 0
             for c in S:
-                if c in ("\n", "\r"):
-                    if not nl_inserted:
-                        self.add_token([self.lex_symbol.NEWLINE, c, line, col])
-                        nl_inserted = True
-                    if self.indents and nl_termination:
-                        self.dedent_to(0)
+                if c == '\\':
+                    _linecont = 2
+                elif c in ("\n", "\r"):
+                    if _linecont <= 0:
+                        if not nl_inserted:
+                            self.add_token([self.lex_symbol.NEWLINE, c, line, col])
+                            nl_inserted = True
+                        if self.indents and nl_termination:
+                            self.dedent_to(0)
+                    else:
+                        _linecont-=1
                     _indent = 0
                     line+=1
                     col = -1
-                elif c == " ":
-                    if col == 0:
-                        _indent = 1
-                    elif _indent>0:
-                        _indent+=1
-                elif c == '\t':
-                    if col == 0:
-                        _indent = TABWIDTH
-                    elif _indent>0:
-                        _indent += TABWIDTH
                 elif c == '#':
                     _indent = 0
+                else:
+                    if _linecont>0:
+                        pass
+                    elif c == " ":
+                        if col == 0:
+                            _indent = 1
+                        elif _indent>0:
+                            _indent+=1
+                    elif c == '\t':
+                        if col == 0:
+                            _indent = TABWIDTH
+                        elif _indent>0:
+                            _indent += TABWIDTH
                 col+=1
             if _indent>0:
                 k = 0

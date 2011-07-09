@@ -3,15 +3,11 @@ import cstrepr
 import cstsearch
 import cstsegments
 import langscape.trail.nfatools as nfatools
-from langscape.util import psyco_optimized, flip
+from langscape.util import flip
 import sys
 
 __all__ = ["CSTBuilder"]
 
-class any_obj:
-    pass
-
-@psyco_optimized
 def shallow_lift(args, langlet_id):
     for arg in args:
         if type(arg) == list:
@@ -20,7 +16,7 @@ def shallow_lift(args, langlet_id):
 
 class CSTBuilder(object):
     def __init__(self, langlet):
-        langlet.load_parse_tables()
+        langlet._load_parse_tables()
         self.NFATracer = nfatools.NFATracerUnexpanded
         self.langlet   = langlet
         self.nfas      = langlet.parse_nfa.nfas
@@ -94,7 +90,7 @@ class CSTBuilder(object):
                 print >> target, ("    %%-%d"%indent+"s = cstbuilder.builder(%s, '%s', \"%s\")")%(name, val, name, doc)
 
 
-    def completion(self, nodelist, item, expected):
+    def completion(self, nodelist, item, expected, track_data):
         if type(item) == str:
             if item in expected:
                 node = self.langlet.tokenize(item)[0]
@@ -138,18 +134,23 @@ class CSTBuilder(object):
 
             # error
             target = self.langlet.get_node_name(nodelist[0])
+            n = len(nodelist)
+            if track_data:
+                n-=track_data["cnt"]
+                expected = track_data["expected"]
             rule = getattr(self.langlet.fn, target).__doc__
             if nid == -1:
                 names = ', '.join(["'"+self.langlet.get_node_name(item)+"'" for item in expected if item!=None])
                 raise ValueError("Not enough arguments to build rule '%s'. "
-                                 "Expected rule(s) at position %i are: "%(target, len(nodelist))+names+ \
+                                 "Expected rule(s) at position %i are: "%(target, n)+names+ \
                                  ".\n\nSee also rule:\n\n    %s"%rule)
             else:
+                # print "EXPECTED", expected
                 insert = self.langlet.get_node_name(item[0])
-                names = ', '.join(["'"+self.langlet.get_node_name(item)+"'" for item in expected if item!=None])
-                raise ValueError("Cannot insert node of type '%s'"
-                                 " at position %i in node '%s'.\n"
-                                 "            Expected rule(s) at position %i are: %s"%(insert, len(nodelist), target, len(nodelist), names)+ \
+                names = ', '.join(["'"+self.langlet.get_node_name(s)+"'" for s in expected if s!=None])
+                raise ValueError("Cannot insert node of type '%s' (%s)"
+                                 " at position %i in node '%s' (%s).\n"
+                                 "            Expected rule(s) at position %i are: %s"%(insert, item[0], n, target, nodelist[0], n, names)+ \
                                  "\n\nSee also rule:\n\n    %s"%rule)
 
 
@@ -158,12 +159,13 @@ class CSTBuilder(object):
         tracer = self.NFATracer(self.langlet.parse_nfa)
         s = nid
         it = iter(args)
+        track_data = {}
         try:
             arg = it.next()
             while True:
                 expected = tracer.select(s)
                 try:
-                    (s, arg) = self.completion(tree, arg, expected)
+                    (s, arg) = self.completion(tree, arg, expected, track_data)
                 except Exception, e:
                     if len(args) == 1 and arg[0] == nid:
                         return arg
@@ -171,6 +173,12 @@ class CSTBuilder(object):
                         raise
                 if arg is None:
                     arg = it.next()
+                    track_data = {}
+                else:
+                    if not track_data:
+                        track_data = {"expected": expected, "cnt": 1}
+                    else:
+                        track_data["cnt"]+=1
         except StopIteration:
             while True:
                 expected = tracer.select(s)
@@ -180,9 +188,9 @@ class CSTBuilder(object):
                     last_set = self.langlet.parse_nfa.last_set[nid]
                     S = [s for s in expected if s in last_set]
                     if S:
-                        (s, arg) = self.completion(tree, [-1], S)
+                        (s, arg) = self.completion(tree, [-1], S, {})
                     else:
-                        (s, arg) = self.completion(tree, [-1], expected)
+                        (s, arg) = self.completion(tree, [-1], expected, {})
 
 
 
@@ -199,10 +207,10 @@ if __name__ == '__main__':
 
     p4d  = langscape.load_langlet("p4d")
     st = p4d.parse("1+a\n")
-
+    '''
     a1 = find_node(st, p4d.parse_symbol.atom)
 
-    for simple_stmt in find_all(p4d.transform(p4d.parse("elm x:\n y")), python.parse_symbol.simple_stmt):
+    for simple_stmt in find_all(p4d.transform(p4d.parse("elm x:\n y\n")), python.parse_symbol.simple_stmt):
         print python.unparse(simple_stmt)
         python.check_node(simple_stmt)
         for n in simple_stmt[1:]:
@@ -216,6 +224,9 @@ if __name__ == '__main__':
     p4d.fn.lambdef(p4d.fn.varargslist("x", ",", "y"), "y")
     p4d.fn.or_test("x", "y")
     p4d.fn.atom("(", "foo", ")")
+    '''
+    tl = find_node(st, p4d.symbol.testlist)
+    p4d.fn.atomize(tl)
 
 
 

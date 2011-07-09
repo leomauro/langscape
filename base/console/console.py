@@ -1,3 +1,5 @@
+# -*- coding: iso-8859-1 -*-
+
 import langscape
 from langscape.trail.nfaparser import NFAParser as Parser
 from langscape.util.path import path
@@ -104,7 +106,10 @@ class ConsoleBase(object):
                         if line:
                             source    = self.prepare_source()  # line-buffer -> source
                             tokstream = self.try_tokenize(source)
-                            self.parseTree = self.try_parse(tokstream)
+                            if tokstream:
+                                self.parseTree = self.try_parse(tokstream)
+                            else:
+                                self.parseTree = None
                         else:
                             guess_more = False
                         if not self.parseTree:
@@ -117,7 +122,8 @@ class ConsoleBase(object):
                                     self.reset()
                                     force_more = False
                                     if exc:
-                                        raise exc, msg.formatter()
+                                        print "\n%s:"%exc.__name__,
+                                        print msg
                                 elif not force_more:
                                     self.reset()
                             continue
@@ -191,6 +197,7 @@ class LSConsole(ConsoleBase, DisplayMixin):
                        **kwd):
         self.user = User()
         self.locals  = __main__.__dict__ if locals is None else locals
+        self.locals
         self.langlet = langlet
         self.console_name = name
         self.use_new_prompt = use_new_prompt
@@ -199,7 +206,7 @@ class LSConsole(ConsoleBase, DisplayMixin):
         # debug options
         self._compiled = {}
         self.parse_error = None
-        self.dct = {}
+        self.dct = {"langlet": langlet}
 
 
     def at_start(self):
@@ -249,7 +256,7 @@ class LSConsole(ConsoleBase, DisplayMixin):
         return source
 
     def transform(self, parse_tree, **kwd):
-        show_source = self.langlet.options["show_source"]
+        show_source = self.langlet.options.get("show_source", False)
         self.langlet.options["show_source"] = False
         cst = self.langlet.transform(parse_tree, **kwd)
         self.langlet.target.projection(cst)
@@ -279,18 +286,19 @@ class LSConsole(ConsoleBase, DisplayMixin):
         finally:
             self.maybe_show_source("\n".join(sources))
         for src in sources:
-            self.runcode(self._compiled[src])
+            if self.langlet.config.target_compiler == "default":
+                print u"\x1B"
+            else:
+                self.runcode(self._compiled[src])
 
     def try_tokenize(self, source):
         try:
-            tokstream = self.langlet.tokenize(source)
+            return self.langlet.tokenize(source)
         except LexerError, err:
             if err.token[1] in ('\n', '\r', ''):
                 self.parse_error = (LexerError, err)
-                raise   # ?
             else:
-                raise   # ??
-        return tokstream
+                raise
 
     def try_parse(self, tokstream):
         # Parse potentially incomplete langlet statement.
@@ -307,5 +315,4 @@ class LSConsole(ConsoleBase, DisplayMixin):
                 return
             else:
                 raise
-        except TokenError, err:
-            return
+

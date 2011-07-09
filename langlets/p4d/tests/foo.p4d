@@ -1,7 +1,10 @@
+# -*- coding: UTF-8 -*-
 
+def foo():
+    1/0
 
-elm d:
-    2
-
+elm x:
+    a
+    b: &[1, foo()]
 
 

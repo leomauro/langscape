@@ -69,9 +69,9 @@
 
     For each N we know the set reachable(N).
 '''
-from langscape.ls_const import SYMBOL_OFFSET
-from cstutil import is_token, is_keyword
-from langscape.trail.nfatracer import NFATracerUnexpanded
+from langscape.ls_const import SYMBOL_OFFSET, FIN
+from cstutil import is_token, is_keyword, is_symbol
+from langscape.trail.nfatracer import NFATracer, NFATracerUnexpanded
 
 class SegmentNode(object):
     def __init__(self, nid, simple_segments, reachables):
@@ -110,7 +110,7 @@ class SegmentTree(object):
         if type(s) == list:
             s = s[0]
         selection = tracer.select(s)
-        if None in selection:
+        if FIN in selection:
             return S
         else:
             T = []
@@ -151,7 +151,7 @@ class SegmentTree(object):
 
             nodes = []
             for s in selection:
-                if s is None:
+                if s is FIN:
                     continue
                 S = []
                 S.append(s)
@@ -199,15 +199,61 @@ class SegmentTree(object):
                             self._cache[(begin, end)] = segm
                             return segm
 
+def fold_segment(segment):
+    res = []
+    for item in segment[::-1]:
+        if type(item) == int:
+            if res:
+                if type(res[0]) == int:
+                    res = [item, res]
+                else:
+                    res = [item]+res
+            else:
+                res.append(item)
+        else:
+            S = []
+            for r in item:
+                if is_token(r):
+                    S.append([r])
+                else:
+                    S.append([r, res])
+            res = S
+    return res
+
+def proj_segment(segment):
+    '''
+    Let S = [a -> b] a generalized segment. For a simple segment we can substitute 'a' by 'b' but in the
+    general case we need to add also a few constant token.
+    '''
+    P = []
+    S = 0
+    for item in segment[::-1]:
+        if P == []:
+            if type(item) == int:
+                P = [item]
+            else:
+                P = item
+        elif type(item) != int:
+            for i,s in enumerate(item):
+                if is_symbol(s):
+                    S = s
+                    P = item[:i]+P+item[i+1:]
+    return S, P
+
 
 if __name__ == '__main__':
     import pprint
     import langscape
-    p4d = langscape.load_langlet("p4d")
-    st = SegmentTree(p4d)
+    langlet = langscape.load_langlet("python")
+    st = SegmentTree(langlet)
     st.create()
-    pprint.pprint( st.nodes )
-    print st[p4d.parse_symbol.stmt: p4d.parse_symbol.test]
+    #pprint.pprint( st.nodes )
+    seg =  st[langlet.parse_symbol.stmt: langlet.parse_symbol.test]
+    print "Segment[stmt: test] = ", seg
+    print "proj_segment(seg)   = ", proj_segment(seg)
+    print "fold_segment(seg)   = ", fold_segment(seg)
+
+
 
 
 

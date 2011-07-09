@@ -18,14 +18,6 @@ import langscape.ls_cmdline_options
 opt = langscape.ls_cmdline_options.getoptions()
 
 #
-#  optional modules
-
-optional_modules = {
-	'importer': True,
-}
-
-
-#
 # compiled module suffix
 
 compiled_ext = ".pyc"

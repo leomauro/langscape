@@ -1,3 +1,5 @@
+# base+ext checksum: 1573445992
+
 ENDMARKER: T_ENDMARKER
 NAME: A_CHAR ( A_CHAR | A_DIGIT )*
 NUMBER: Number  
@@ -67,17 +69,17 @@ Intnumber: Hexnumber | Octnumber | Decnumber
 Hexnumber: '0' ('x'|'X') A_HEX_DIGIT+
 Octnumber: '0' A_OCT_DIGIT+
 Decnumber: '0' | (A_NON_NULL_DIGIT A_DIGIT*)
-Imagnumber: (Intnumber | Floatnumber) ('j'|'J')
+Imagnumber: (Decnumber | Floatnumber) ('j'|'J')
 Floatnumber: Pointfloat | Expfloat
 Pointfloat: A_DIGIT+ '.' A_DIGIT* [Exponent] | '.' A_DIGIT+ [Exponent]
-Expfloat: Intnumber Exponent
+Expfloat: Decnumber Exponent
 Exponent: ('e'|'E') ['-'|'+'] A_DIGIT+
 STR_PREFIX: 'u'['r'|'R'] |'U'['r'|'R'] |'r' |'R'
-Single: "'" (A_BACKSLASH ANY | ANY)* "'"
-Double: '"' (A_BACKSLASH ANY | ANY)* '"'
-Single3: "'" "'" "'" (ANY | "'" | "'" ANY* "'" )* "'" "'" "'"
-Double3: '"' '"' '"' (ANY | '"' | '"' ANY* '"' )* '"' '"' '"'
-Number: ('0' ('x'|'X') A_HEX_DIGIT+ | '0' A_OCT_DIGIT* | A_NON_NULL_DIGIT A_DIGIT* ) [ 'l' | 'L' | Exponent ['j'|'J'] | 'j' | 'J' ] | (A_DIGIT+ '.' A_DIGIT* [Exponent] ) ['j'|'J']
+Single: "'" (A_BACKSLASH (ANY | 'x' A_HEX_DIGIT A_HEX_DIGIT) | ANY)* "'"
+Double: '"' (A_BACKSLASH (ANY | 'x' A_HEX_DIGIT A_HEX_DIGIT) | ANY)* '"'
+Single3: "'" "'" "'" (ANY | A_BACKSLASH (ANY | "'" | 'x' A_HEX_DIGIT A_HEX_DIGIT ) | "'" ANY | "'" ANY* "'" ANY )* "'" "'" "'"
+Double3: '"' '"' '"' (ANY | A_BACKSLASH (ANY | '"' | 'x' A_HEX_DIGIT A_HEX_DIGIT ) | '"' ANY | '"' ANY* '"' ANY )* '"' '"' '"'
+Number: '0' ('x'|'X') A_HEX_DIGIT+ | ( '0' A_OCT_DIGIT* | A_NON_NULL_DIGIT A_DIGIT* ) [ 'l' | 'L' | Exponent ['j'|'J'] | 'j' | 'J' ] | (A_DIGIT+ '.' A_DIGIT* [Exponent] ) ['j'|'J']
 OPERATOR: OPERATOR_DEF
 RIGHT: RIGHT_DEF
 LEFT: LEFT_DEF

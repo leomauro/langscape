@@ -16,14 +16,7 @@ from langscape.ls_config import*
 
 import langscape.ls_cmdline_options
 opt = langscape.ls_cmdline_options.getoptions()
-
-#
-#  optional modules
-
-optional_modules = {
-	'importer': False,
-}
-
+opt.add_option("--left-rec", dest="left_rec", action="store_true", help="eliminates direct left recursion from grammar. If gram.g is original grammar file it will be replaced by gram.g.mine")
 
 #
 # compiled module suffix

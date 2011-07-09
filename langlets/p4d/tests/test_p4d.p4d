@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-import EasyExtend.util.unittest as unittest
+import langscape.util.unittest as unittest
 
 class TestP4DOperations(unittest.TestCase):
     def setUp(self):
@@ -43,6 +43,17 @@ class TestP4DOperations(unittest.TestCase):
 
     def test_comment_children(self):
         self.assertEqual(len(self.game.children('*')), 1)
+
+    def test_p4d_name(self):
+        # This test shall do nothing except parsing the expressions with
+        # raising an error
+        k = 0
+        a = 0
+        k-a+1
+        #k-=1
+        k -= 1
+        k-a:
+            b
 
     def test_iteration(self):
         for team in self.game.team:
@@ -152,7 +163,7 @@ class Test_p4d_ns(unittest.TestCase):
 class TestTextAndComment(unittest.TestCase):
 
     def test_various_1(self):
-        import p4dutils
+        import langscape.langlets.p4d.p4dutils as p4dutils
         elm a:
             '''
             Some text.
@@ -168,7 +179,7 @@ class TestTextAndComment(unittest.TestCase):
         self.assertEqual(p4dutils.ignore_whitespace(a.CDATA()), "And a CDATA section.")
 
     def test_two_texts(self):
-        import p4dutils
+        import langscape.langlets.p4d.p4dutils as p4dutils
         elm a:
             '''
             One text.
@@ -180,7 +191,7 @@ class TestTextAndComment(unittest.TestCase):
         self.assertEqual(p4dutils.ignore_whitespace(a.text()), "Another one.")
 
     def test_two_comments(self):
-        import p4dutils
+        import langscape.langlets.p4d.p4dutils as p4dutils
         elm a:
             {*
             One comment.
@@ -307,6 +318,12 @@ class TestPythonExprInP4D(unittest.TestCase):
         self.assertEqual(len(a.b), 3)
         self.assertEqual([int(b.text()) for b in a.b], [1,2,3])
 
+    def _test_list_empty(self):
+        elm a:
+            b: &[]
+        self.assertEqual(len(a.b), 3)
+        self.assertEqual([int(b.text()) for b in a.b], [1,2,3])
+
     def test_list_of_elements(self):
         elm x:0
         elm y:1
@@ -402,6 +419,28 @@ class TestPythonExprInP4D(unittest.TestCase):
         print html.xmlstr()
         #self.assertEqual(a.text(), "bla")
 
+class TestP4DElementReferences(unittest.TestCase):
+    def test_ref_other(self):
+        elm a:
+            b: "foo"
+
+        elm b:
+            d: &a.b.text()
+
+        self.assertTrue(b.d.text(), "foo")
+
+    def test_ref_parent(self):
+        elm a:
+            b:
+                x: "foo"
+                c:
+                    d: & ..c.x.text()
+
+        elm b:
+            c: &a.b.text()
+
+        self.assertTrue(b.c.text(), "foo")
+
 class TestP4DUpdate(unittest.TestCase):
     def test_add_element(self):
         elm a:
@@ -417,6 +456,8 @@ class TestP4DUpdate(unittest.TestCase):
 
 # notice that this runs with a slightly modified version of unittest
 
+
+
 unittest.run_unittest(TestP4DOperations)
 unittest.run_unittest(TestP4DListOperations)
 unittest.run_unittest(TestP4DFilter)
@@ -426,3 +467,6 @@ unittest.run_unittest(TestTextAndComment)
 unittest.run_unittest(TestP4DElementSetter)
 unittest.run_unittest(TestPythonExprInP4D)
 unittest.run_unittest(TestP4DUpdate)
+'''
+unittest.run_unittest(TestP4DElementReferences)
+'''

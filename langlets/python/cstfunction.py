@@ -30,6 +30,15 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         except TypeError:
             raise
 
+    def atomize(self, node):
+        if node[0] == self.symbol.atom:
+            return node
+        elif node[0] in (self.token.STRING,
+                         self.token.NAME,
+                         self.token.NUMBER):
+            return self.atom(node)
+        return self.atom("(", node, ")")
+
     def maybe_projection(self, node):
         '''
         This is a variant of the projection() function. It projects on a Python cst only
@@ -56,7 +65,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         #        any_expr(CallFunc([[func]], [a_atom, expr])) (comp_op expr)*.
         # Otherwise we apply
         #        any_expr(CallFunc("getattr", [a_atom, expr])) (comp_op expr)*.
-        _not_tests = find_all(a_test, self.symbol.not_test, depth = 3)
+        _not_tests = find_all(a_test, self.symbol.not_test,depth = 3)
         for nt in _not_tests:
             _comparison = find_node(nt, self.symbol.comparison)
             _expr = _comparison[1]
@@ -64,9 +73,9 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
             if func:
                 if func == ".":
                      _power    = find_node(_expr, self.symbol.power)
-                     _trailer  = find_all(_power, self.symbol.trailer, depth = 1)
+                     _trailer  = find_all(_power, self.symbol.trailer,depth = 1)
                      _name     = find_node(_power, self.token.NAME)
-                     _power[1] = atomize(a_atom)
+                     _power[1] = self.atomize(a_atom)
                      _power.insert(2, self.trailer(".", _name))
                 else:
                     replace_node(_expr, self.expr(self.CallFunc(func, [a_atom, _cloned])))
@@ -135,6 +144,11 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
                 raise ValueError,"Unexpected node %s"%(self.token.tok_name[arg[0]])
         return arglist(*arguments)
 
+    def func_name(self, funcdef):
+        if funcdef[1][0] == self.symbol.decorators:
+            return funcdef[3][1]
+        else:
+            return funcdef[2][1]
 
     def to_signature(self, varargs):
         """
@@ -144,7 +158,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         @return: dict of following structure:
                  {'args': dict, 'defaults': dict, 'star_args': dict, 'dstar_args': dict}
         """
-        assert proj_nid(varargs) == self.symbol.varargslist, self.symbol.sym_name[proj_nid(varargs)]
+        #assert proj_nid(varargs) == self.symbol.varargslist, self.symbol.sym_name[proj_nid(varargs)]
         signature = {'args':{}, 'defaults':{}, 'star_args': {}, 'dstar_args':{}, 'arglist': [] }
         n = len(varargs)-2
         i = 0
@@ -182,10 +196,10 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         nodeA = self.maybe_projection(nodeA)
         nodeB = self.maybe_projection(nodeB)
         if nodeA[0] == self.symbol.power and nodeB[0] == self.symbol.power:
-            trailerA = find_all(nodeA, self.symbol.trailer, depth = 1)
+            trailerA = find_all(nodeA, self.symbol.trailer,depth = 1)
             if not trailerA:
                 trailerA = []
-            trailerB = find_all(nodeB, self.symbol.trailer, depth = 1)
+            trailerB = find_all(nodeB, self.symbol.trailer,depth = 1)
             if not trailerB:
                 trailerB = []
             atomB    = find_node(nodeB, self.symbol.atom)
@@ -197,8 +211,8 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         Two function calls funA(argsA), funB(argsB) are merged to one call funA(args).funB(argsB).
         '''
         if funA[0] == self.symbol.power and funB[0] == self.symbol.power:
-            trailerA = find_all(funA, self.symbol.trailer, depth = 1)
-            trailerB = find_all(funB, self.symbol.trailer, depth = 1)
+            trailerA = find_all(funA, self.symbol.trailer,depth = 1)
+            trailerB = find_all(funB, self.symbol.trailer,depth = 1)
             atomA    = find_node(funA, self.symbol.atom)
             atomB    = find_node(funB, self.symbol.atom)
             return self.power(atomA, *(trailerA+[trailer(".",atomB[1])]+trailerB))
@@ -215,7 +229,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         "splits an expr of the kind a.b(x).c(). ... into factors a, b, (x), c, (), ..."
         pw = find_node(node, self.symbol.power)
         at = find_node(pw, self.symbol.atom)
-        tr = find_all(pw, self.symbol.trailer, depth = 1)
+        tr = find_all(pw, self.symbol.trailer,depth = 1)
         return [at]+tr
 
 
@@ -228,7 +242,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
                     position. default value is -1 i.e. stmt node
                     will be appended.
         '''
-        n = find_node(_suite, self.symbol.simple_stmt, depth = 1)
+        n = find_node(_suite, self.symbol.simple_stmt,depth = 1)
         if n:
             _args = [self.stmt(n)]
             if pos==0:
@@ -370,32 +384,32 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         addargs.append(self.fit(allargs[-1], self.symbol.factor))
         return self.term(*addargs)
 
-    def FloorDiv(self, fst, snd, *args):
+    def FloorDiv(self, *args):
         "FloorDiv: expr ( '//' expr)+ -> expr"
         addargs = []
-        allargs = [fst,snd]+list(args)
+        allargs = args
         for item in allargs[:-1]:
             addargs.append(self.fit(item, self.symbol.factor))
             addargs.append("//")
         addargs.append(self.fit(allargs[-1], self.symbol.factor))
         return self.term(*addargs)
 
-    def BitAnd(self, fst, snd, *args):
-        "BitOr: expr ( '&' expr)+ -> expr"
-        allargs = [self.fit(arg, self.symbol.shift_expr) for arg in [fst, snd]+list(args)]
+    def BitAnd(self, *args):
+        "BitAnd: expr ( '&' expr)+ -> expr"
+        allargs = [self.fit(arg, self.symbol.shift_expr) for arg in args]
         return self.and_expr(*allargs)
 
-    def BitOr(self, fst, snd, *args):
+    def BitOr(self, *args):
         "BitOr: expr ( '|' expr)+ -> expr"
-        allargs = [self.fit(arg, self.symbol.xor_expr) for arg in [fst,snd]+list(args)]
+        allargs = [self.fit(arg, self.symbol.xor_expr) for arg in args]
         return self.expr(*allargs)
 
-    def BitXor(self, fst, snd, *args):
+    def BitXor(self, *args):
         "BitXor: expr ( '^' expr)+ -> expr"
-        allargs = [self.fit(arg, self.symbol.and_expr) for arg in [fst,snd]+list(args)]
+        allargs = [self.fit(arg, self.symbol.and_expr) for arg in args]
         return self.xor_expr(*allargs)
 
-    def If(self, *args,**kwd):
+    def If(self, *args, **kwd):
         # TODO: to be finished
         #_else = kwd.get("_else")
         _ifargs = []
@@ -511,7 +525,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
                 for item in call[1:]:
                     assert is_node(item, self.symbol.trailer)
                     trailers.insert(0,item)
-        return self.power(self.atom("(", self.testlist_gexp(self.test(expr)),")"),*trailers)
+        return self.power(self.atom("(", self.testlist_comp(self.test(expr)),")"),*trailers)
 
     def List(self, *args):
         '''
@@ -529,7 +543,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         if not args:
             return self.atom("(",")")
         else:
-            return self.atom("(", self.testlist_gexp(*([self.expr(arg) for arg in args]+[","])),")")
+            return self.atom("(", self.testlist_comp(*([self.expr(arg) for arg in args]+[","])),")")
 
     def Dict(self, pairs = None, **dct):
         '''
@@ -591,7 +605,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         '''
         SUBSCR = [self.symbol.subscriptlist,
                   self.subscript(self.expr(sub))]+[self.subscript(self.expr(arg)) for arg in subs]
-        return self.power(self.atom('(', self.testlist_gexp(self.expr(expression)),')'),
+        return self.power(self.atom('(', self.testlist_comp(self.expr(expression)),')'),
                           self.trailer('[',SUBSCR,']'))
 
     def Return(self, *args):
@@ -658,7 +672,7 @@ class LangletCSTFunction(BaseClass("CSTFunction", parent_langlet)):
         if not args:
             return self.atom("(",")")
         else:
-            exprs = self.testlist_gexp(*list(args)+[","])
+            exprs = self.testlist_comp(*list(args)+[","])
             return self.atom("(", exprs ,")")
 
     def Binary(self, outnode, op, *args):

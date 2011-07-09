@@ -4,23 +4,13 @@ from langscape.util.path import path
 import os
 
 def convert2p4d(langlet, input_file):
-    if langlet.options["flex"]:
-        import langscape.base.importer as importer
-        flexutils = importer.import_from_langlet(langlet, "langscape.langlets.p4d.flexutils")
-        flexutils.convert2p4d(langlet, input_file)
+    out, ext = input_file.splitext()
+    out = out+".p4d"
+    if ext in (".htm", ".html"):
+        p4d_str = langlet.P4D.from_html(open(input_file).read()).p4dstr()
     else:
-        out, ext = input_file.splitext()
-        out = out+".p4d"
-        if ext in (".htm", ".html"):
-            p4d_str = langlet.P4D.from_html(open(input_file).read()).p4dstr()
-        else:
-            p4d_str = langlet.P4D.from_xml(open(input_file).read()).p4dstr()
-        open(out,"w").write("elm "+p4d_str)
-
-def runflex(langlet, input_file):
-    import langscape.base.importer as importer
-    flexutils = importer.import_from_langlet(langlet, "langscape.langlets.p4d.flexutils")
-    flexutils.runflex(langlet, input_file)
+        p4d_str = langlet.P4D.from_xml(open(input_file).read()).p4dstr()
+    open(out,"w").write("elm "+p4d_str)
 
 def autorun():
     (options, args) = config.opt.parse_args()
@@ -38,10 +28,6 @@ def autorun():
             else:
                 f = path(os.getcwd()).joinpath(f)
         convert2p4d(langlet_obj, f)
-    elif langlet_obj.options["flex"]:
-        f = path(os.getcwd()).joinpath(path(args[-1]))
-        runflex(langlet, f)
-        return
     elif args:
         module = args[-1]
         langlet_obj.run_module(module)

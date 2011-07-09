@@ -7,6 +7,7 @@
 from __future__ import with_statement
 
 import os
+import string
 from langscape.util import get_traceback
 from langscape.util.path import path
 import langscape.base.loader as loader
@@ -36,7 +37,6 @@ class LangletGenerator(object):
                 self.options["compiled_ext"] = module.config.compiled_ext
             if self.options["target_compiler"] == "":
                 self.options["target_compiler"] = module.config.target_compiler
-            self.options["optional_modules"] = module.config.optional_modules
         if self.options["target"] == "":
             self.options["target"] = self.name
 
@@ -68,96 +68,36 @@ class LangletGenerator(object):
     def create_langlet_data(self, pth_langlet_py):
         from langscape.base.grammar_gen import ParserGrammar, LexerGrammar
 
-        LexerGrammar(self.name, pth_langlet_py, {"build_nfa": True}).load_grammar()
-        ParserGrammar(self.name, pth_langlet_py, {"build_nfa": True}).load_grammar()
+        LexerGrammar(self.name, pth_langlet_py, {"build_langlet": True}).load_grammar()
+        ParserGrammar(self.name, pth_langlet_py, {"build_langlet": True}).load_grammar()
 
-        pth_langlet = pth_langlet_py.dirname()
-        if "langlets" in pth_langlet:
-            l = pth_langlet.split(os.path.sep)
-            langlet = __import__(str(".".join(l[l.index("langscape"):]+["langlet"])), globals(), locals(), [""])
-        else:
-            langlet = __import__("langlet", globals(), locals(), [""])
+        module_path, langlet = loader.find_langlet(self.name)
+        langlet_obj = langlet.Langlet()
+        langlet_obj.package = loader.get_package(module_path)
         loader.load_nfas(langlet.Langlet(), True, True)
 
 
-    def create_conf_py(self, lnlt_id, pth_conf):
+    def create_langlet_config_py(self, langlet_id, pth_conf):
         # create new conf.py file
-        conf_py = []
-        prompt = self.options["prompt"]
-        parent = self.options["parent"]
-        target = self.options["target"]
-        source_ext   = self.options["source_ext"]
-        compiled_ext = self.options["compiled_ext"]
-        target_compiler = self.options["target_compiler"] or "default"
-        optional_modules= self.options.get("optional_modules", {})
-
+        d_langlet_config = {
+            "LANGLET_ID" : str(langlet_id),
+            "COMPILED_EXT": '"'+self.options["compiled_ext"]+'"',
+            "SOURCE_EXT": '"'+self.options["source_ext"]+'"',
+            "PROMPT": '"'+self.options["prompt"]+'"' if self.options["prompt"] else '"> "',
+            "LANGLET_NAME": '"'+self.name+'"',
+            "PARENT_LANGLET": '"'+self.options["parent"]+'"',
+            "TARGET_LANGLET": '"'+self.options["target"]+'"' if self.options["target"] else '"'+self.name+'"',
+            "TARGET_COMPILER": '"'+self.options["target_compiler"]+'"' if self.options["target_compiler"] else '"default"'
+        }
         with open(pth_conf) as f_conf:
-            optmodules_on = False
-            conf_py.extend(f_conf.readlines())
-            for i,line in enumerate(conf_py):
-                if line.find("%PROMPT%")>0:
-                    if prompt:
-                        if prompt.startswith('"'):
-                            conf_py[i] = line.replace("%PROMPT%", prompt)
-                        else:
-                            conf_py[i] = line.replace("%PROMPT%", '"'+prompt+'"')
-                    else:
-                        conf_py[i] = line.replace("%PROMPT%", '">>> "')
-                elif line.find("%LANGLET_ID%")>0:
-                    conf_py[i] = line.replace("%LANGLET_ID%", str(lnlt_id))
-                elif line.find("%LANGLET_NAME%")>0:
-                    conf_py[i] = line.replace("%LANGLET_NAME%", '"'+self.name+'"')
-                elif line.find("%PARENT_LANGLET%")>0:
-                    if parent:
-                        conf_py[i] = line.replace("%PARENT_LANGLET%", '"'+parent+'"')
-                    else:
-                        conf_py[i] = line.replace("%PARENT_LANGLET%", '""')
-                elif line.find("%TARGET_LANGLET%")>0:
-                    if target:
-                        conf_py[i] = line.replace("%TARGET_LANGLET%", '"'+target+'"')
-                    else:
-                        conf_py[i] = line.replace("%TARGET_LANGLET%", '""')
-                elif line.find("%TARGET_COMPILER%")>0:
-                    conf_py[i] = line.replace("%TARGET_COMPILER%", '"'+target_compiler+'"')
-                elif line.find("%SOURCE_EXT%")>0:
-                    if source_ext and not source_ext[0] == ".":
-                        source_ext = "."+source_ext
-                    conf_py[i] = line.replace("%SOURCE_EXT%", '"'+source_ext+'"')
-                elif line.find("%COMPILED_EXT%")>0:
-                    if compiled_ext and not compiled_ext[0] == ".":
-                        compiled_ext = "."+compiled_ext
-                    conf_py[i] = line.replace("%COMPILED_EXT%", '"'+compiled_ext+'"')
-                elif line.startswith("optional_modules ="):
-                    optmodules_on = True
-                elif optmodules_on:
-                    if line.startswith("}"):
-                        optmodules_on = False
-                    else:
-                        fragments = line.split(":")
-                        if len(fragments) == 2:
-                            name = fragments[0].strip()
-                            if optional_modules.get(name[1:-1]):
-                                conf_py[i] = line.replace("False", "True")
-        return ''.join(conf_py)
+            st = string.Template(f_conf.read())
+            return st.substitute(**d_langlet_config)
 
-    def update_lex_token(self, lnlt_id, pth_lex_token_template):
+    def update_lex_token(self, langlet_id, pth_lex_token_template):
         # update LANGLET_ID in lex_token.py
-        lex_lines = open(pth_lex_token_template).readlines()
-        for i, line in enumerate(lex_lines):
-            if line.find("%LANGLET_ID%")>0:
-                lex_lines[i] = line.replace("%LANGLET_ID%", str(lnlt_id))
-                break
-        return ''.join(lex_lines)
-
-    def update_langlet_name(self, pth_langlet_module):
-        # update LANGLET_ID in lex_token.py
-        langlet_lines = open(pth_langlet_module).readlines()
-        for i, line in enumerate(langlet_lines):
-            if line.find("%LANGLET_NAME%")>0:
-                langlet_lines[i] = line.replace("%LANGLET_NAME%", self.name.capitalize())
-                break
-        return ''.join(langlet_lines)
-
+        with open(pth_lex_token_template) as f:
+            st = string.Template(f.read())
+            return st.substitute(LANGLET_ID = str(langlet_id))
 
     def create_files(self):
         self.update_options()
@@ -180,9 +120,9 @@ class LangletGenerator(object):
             lnlt_id = count*(10**4)
 
             pth_template = parent_path.joinpath("langlet_template")
-            pth_conf = pth_template.joinpath("langlet_config.py_template")
+            pth_conf = pth_template.joinpath("langlet_config.strtempl")
 
-            pth_langlet_py = pth_template.joinpath("langlet.py_template")
+            pth_langlet_py = pth_template.joinpath("langlet.strtempl")
             langlet_py = ""
 
             pth_template.copytree(pth_langlet)
@@ -196,26 +136,20 @@ class LangletGenerator(object):
 
             # operate on destination folder...
             pth_conf = pth_langlet.joinpath("langlet_config.py")
-            pth_conf_template = pth_langlet.joinpath("langlet_config.py_template")
+            pth_conf_template = pth_langlet.joinpath("langlet_config.strtempl")
             with open(pth_conf,"w") as f_conf:
                 f_conf.write(self.create_conf_py(lnlt_id, pth_conf_template))
             pth_langlet.joinpath("run.py").rename(pth_langlet.joinpath("run_"+self.name+".py"))
-            pth_langlet.joinpath("langlet_config.py_template").remove()
-            # remove optional and unused modules
-            optional_modules= self.options.get("optional_modules", {})
-            for mod_name, avail in optional_modules.items():
-                if not avail:
-                    pth_langlet.joinpath(mod_name+".py").remove()
+            pth_langlet.joinpath("langlet_config.strtempl").remove()
 
             # update LANGLET_ID in lex_token.py
             pth_lex_token = pth_langlet.joinpath("lexdef","lex_token.py")
-            pth_lex_token_template = path(pth_lex_token+"_template")
+            pth_lex_token_template = path(pth_lex_token.replace(".py",".strtempl"))
             with open(pth_lex_token, "w") as f_lex:
                 f_lex.write(self.update_lex_token(lnlt_id, pth_lex_token_template))
 
             self.create_langlet_data(pth_conf)
             pth_lex_token_template.remove()
-
         except Exception, e:
             print get_traceback()
             self.new_langlet_pth.rmtree()
@@ -231,11 +165,11 @@ class LangletGenerator(object):
         white = " "*(s.find("+-")+3)
         print white+"+- [%s]"%self.name
         print white+"    +- __init__.py"
-        print white+"    +- run_%s.py"%self.name
-        print white+"    +- langlet_config.py"
-        print white+"    +- importer.py"
+        print white+"    +- cstfunction.py"
         print white+"    +- langlet.py"
-        print white+"    +- lexer.py"
+        print white+"    +- langlet_config.py"
+        print white+"    +- postlexer.py"
+        print white+"    +- run_%s.py"%self.name
         print white+"    +- transformer.py"
         print white+"    +- [cstdef]"
         print white+"        +- __init__.py"
@@ -247,17 +181,17 @@ class LangletGenerator(object):
         print white+"        +- lex_symbol.py"
         print white+"        +- lex_token.py"
         print white+"        +- lex_nfa.py"
-        print white+"        +- Token.ext"
-        print white+"        +- Token.g"
+        print white+"        +- TokenGen.g"
         print white+"        +- TokenBase.g"
+        print white+"        +- TokenExt.g"
         print white+"    +- [parsedef]"
         print white+"        +- __init__.py"
         print white+"        +- parse_symbol.py"
         print white+"        +- parse_token.py"
         print white+"        +- parse_nfa.py"
-        print white+"        +- Grammar.ext"
-        print white+"        +- Grammar.g"
+        print white+"        +- GrammarGen.g"
         print white+"        +- GrammarBase.g"
+        print white+"        +- GrammarExt.g"
         print white+"    +- [reports]"
         print white+"    +- [tests]"
 

@@ -1,9 +1,12 @@
+# base+ext checksum: -441753124
+
 single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE
 file_input: (NEWLINE | stmt)* ENDMARKER
 eval_input: testlist NEWLINE* ENDMARKER
 decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE
 decorators: decorator+
-funcdef: [decorators] 'def' NAME parameters ':' suite
+decorated: decorators (classdef | funcdef)
+funcdef: 'def' NAME parameters ':' suite
 parameters: '(' [varargslist] ')'
 varargslist: ((fpdef ['=' test] ',')*('*' NAME [',' '**' NAME] | '**' NAME) |fpdef ['=' test] (',' fpdef ['=' test])* [','])
 fpdef: NAME | '(' fplist ')'
@@ -25,22 +28,22 @@ raise_stmt: 'raise' [test [',' test [',' test]]]
 import_stmt: import_name | import_from
 import_name: 'import' dotted_as_names
 import_from: ('from' ('.'* dotted_name | '.'+)'import' ('*' | '(' import_as_names ')' | import_as_names))
-import_as_name: NAME [('as' | NAME) NAME]
-dotted_as_name: dotted_name [('as' | NAME) NAME]
+import_as_name: NAME ['as' NAME]
+dotted_as_name: dotted_name ['as' NAME]
 import_as_names: import_as_name (',' import_as_name)* [',']
 dotted_as_names: dotted_as_name (',' dotted_as_name)*
 dotted_name: NAME ('.' NAME)*
 global_stmt: 'global' NAME (',' NAME)*
 exec_stmt: 'exec' expr ['in' test [',' test]]
 assert_stmt: 'assert' test [',' test]
-compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef
+compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated
 if_stmt: 'if' test ':' suite ('elif' test ':' suite)* ['else' ':' suite]
 while_stmt: 'while' test ':' suite ['else' ':' suite]
 for_stmt: 'for' exprlist 'in' testlist ':' suite ['else' ':' suite]
 try_stmt: ('try' ':' suite ((except_clause ':' suite)+ ['else' ':' suite] ['finally' ':' suite] | 'finally' ':' suite))
-with_stmt: 'with' test [ with_var ] ':' suite
-with_var: ('as' | NAME) expr
-except_clause: 'except' [test [',' test]]
+with_stmt: 'with' with_item (',' with_item)*  ':' suite
+with_item: test ['as' expr]
+except_clause: 'except' [test [('as' | ',') test]]
 suite: simple_stmt | NEWLINE INDENT stmt+ DEDENT
 testlist_safe: old_test [(',' old_test)+ [',']]
 old_test: or_test | old_lambdef
@@ -59,9 +62,9 @@ arith_expr: term (('+'|'-') term)*
 term: factor (('*'|'/'|'%'|'//') factor)*
 factor: ('+'|'-'|'~') factor | power
 power: atom trailer* ['**' factor]
-atom: ('(' [yield_expr|testlist_gexp] ')' |'[' [listmaker] ']' |'{' [dictmaker] '}' |'`' testlist1 '`' |NAME | NUMBER | STRING+)
+atom: ('(' [yield_expr|testlist_comp] ')' |'[' [listmaker] ']' |'{' [dictorsetmaker] '}' |'`' testlist1 '`' |NAME | NUMBER | STRING+)
 listmaker: test ( list_for | (',' test)* [','] )
-testlist_gexp: test ( gen_for | (',' test)* [','] )
+testlist_comp: test ( comp_for | (',' test)* [','] )
 lambdef: 'lambda' [varargslist] ':' test
 trailer: '(' [arglist] ')' | '[' subscriptlist ']' | '.' NAME
 subscriptlist: subscript (',' subscript)* [',']
@@ -70,15 +73,16 @@ sliceop: ':' [test]
 exprlist: expr (',' expr)* [',']
 testlist: test (',' test)* [',']
 dictmaker: test ':' test (',' test ':' test)* [',']
+dictorsetmaker: ( (test ':' test (comp_for | (',' test ':' test)* [','])) |(test (comp_for | (',' test)* [','])) )
 classdef: 'class' NAME ['(' [testlist] ')'] ':' suite
-arglist: (argument ',')* (argument [',']| '*' test [',' '**' test] | '**' test)
-argument: test [gen_for] | test '=' test  
+arglist: (argument ',')* (argument [',']|'*' test (',' argument)* [',' '**' test]|'**' test)
+argument: test [comp_for] | test '=' test
 list_iter: list_for | list_if
 list_for: 'for' exprlist 'in' testlist_safe [list_iter]
 list_if: 'if' old_test [list_iter]
-gen_iter: gen_for | gen_if
-gen_for: 'for' exprlist 'in' or_test [gen_iter]
-gen_if: 'if' old_test [gen_iter]
+comp_iter: comp_for | comp_if
+comp_for: 'for' exprlist 'in' or_test [comp_iter]
+comp_if: 'if' old_test [comp_iter]
 testlist1: test (',' test)*
 encoding_decl: NAME
 yield_expr: 'yield' [testlist]

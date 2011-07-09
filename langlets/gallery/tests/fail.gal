@@ -1,0 +1,14 @@
+def bar(address):
+    switch address:
+        case 127.0.0.1:
+            print "localhost"
+    	case 129.1.3.45:
+    		def f():
+    			(1/2.6.8.0,
+    			 0,
+    			 0)
+    		f()
+
+a = 129.1.3.45
+bar(129.1.3.45)
+

@@ -38,3 +38,28 @@ for _name, _value in globals().items():
 del _name
 del _value
 
+token_map = {'""(A_BACKSLASHANY|ANY)*""': 761024,
+ '"(A_BACKSLASHANY|ANY)*"': 761025,
+ '#': 761022,
+ '(': 761008,
+ ')': 761009,
+ '*': 761014,
+ '+': 761013,
+ ',': 761021,
+ ':': 761012,
+ 'A_CHAR(A_CHAR|A_DIGIT)*': 761002,
+ 'A_DIGIT+': 761003,
+ 'A_LINE_END': 761005,
+ 'A_WHITE+': 761023,
+ 'LINE_COMMENTANY*A_LINE_END': 761016,
+ 'NAME|NEWLINE|LPAR|RPAR|LSQB|RSQB|COLON|PLUS|STAR|WHITE|VBAR|STRING|COMMENT|LBRA|RBRA|COMMA': 761018,
+ 'Single|Double': 761004,
+ 'T_DEDENT': 761007,
+ 'T_ENDMARKER': 761001,
+ 'T_INDENT': 761006,
+ '[': 761010,
+ ']': 761011,
+ 'unit*ENDMARKER': 761017,
+ '{': 761019,
+ '|': 761015,
+ '}': 761020}

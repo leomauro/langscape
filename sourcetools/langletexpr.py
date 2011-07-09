@@ -2,6 +2,7 @@ __all__ = ["refine", "LangletExpr", "RuleTemplate"]
 
 import os, pprint
 import langscape
+import langscape
 from langscape.ls_const import*
 from langscape.csttools.cstsearch import*
 from langscape.trail.nfaparser import NFAParser, TokenStream

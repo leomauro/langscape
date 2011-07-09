@@ -1,5 +1,6 @@
-# base+ext checksum: -1972422850
+# base+ext checksum: 1589620943
 
+eval_input: rule ENDMARKER
 file_input: rule* ENDMARKER
 rule: NAME ':' rhs ';'
 rhs: alt ( '|' alt )*

@@ -56,7 +56,7 @@ class NFATracer(object):
                 return states
             follow = self.trans[state[0]]
             for item in follow:
-                if item[1] in TRAIL_CONTROL:
+                if item[2] in TRAIL_CONTROL:
                     if item in visited:
                         continue
                     visited.add(item)

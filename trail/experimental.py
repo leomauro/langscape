@@ -244,7 +244,7 @@ def test_recursive1():
     ('<', 1, A): [(A, '(', 0, A)],
     ('>', 3, A): [(A, ')', 0, A)],
     ('a', 4, A): [(A, ')', 0, A)],
-    (A, ')', 0, A): [(None, '-', A), ('>', 3, A)]}
+    (A, ')', 0, A): [(FIN, FEX, 0, A), ('>', 3, A)]}
 
     interpreter = NFAInterpreter(nfa)
     print interpreter.run('<<a>>')
@@ -258,7 +258,7 @@ def test_recursive2():
      (b, 2, R): [(R, '(', 0, R), (a, 4, R)],
      (a, 4, R): [(c, 5, R)],
      (c, 5, R): [(R, ')', 0, R)],
-     (R, ')', 0, R): [(None, '-', R), (a, 4, R)]
+     (R, ')', 0, R): [(FIN, FEX, 0, R), (a, 4, R)]
     }
     interpreter = NFAInterpreter(nfa)
     assert interpreter.run('abac') == ['R', 'a', 'b', 'a', 'c']
@@ -273,13 +273,13 @@ def test_backmatch():
     nfa_R = {(R, 0, R): [(a, '=W', 0, R)],
              (a, '=W', 0, R): [(b, 1, R)],
              (b, 1, R): [(a, '$W', 3, R)],
-             (a, '$W', 3, R):[(None, '-', R)]
+             (a, '$W', 3, R):[(FIN, FEX, 0, R)]
     }
 
     nfa_S = {(S, 0, S): [(a, 0, S), (b, 0, S), (c, 0, S)],
-             (a, 0, S): [(None, '-', S)],
-             (b, 0, S): [(None, '-', S)],
-             (c, 0, S): [(None, '-', S)]}
+             (a, 0, S): [(FIN, FEX, 0, S)],
+             (b, 0, S): [(FIN, FEX, 0, S)],
+             (c, 0, S): [(FIN, FEX, 0, S)]}
 
 
     interpreter = NFAInterpreter(nfa_R)

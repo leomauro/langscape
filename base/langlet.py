@@ -62,8 +62,8 @@ class BaseLanglet(object):
         Node name from node id.
         '''
         name = None
-        if nid is None:
-            return "None"
+        if nid is FIN:
+            return "FIN"
         elif is_keyword(nid):
             if typ == "parse":
                 return "kwd:"+flip(self.parse_nfa.keywords).get(nid, str(nid))

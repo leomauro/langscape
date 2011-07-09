@@ -17,12 +17,12 @@ class TestLeftRecElimination(unittest.TestCase):
         B = 2
         X = 3
         nfa = ["A: A X | B",
-        (A,0,A),
-        {(A,0,A): [(A,1,A),(B,2,A)],
-        (B,2,A): [(FIN,FEX,A)],
-        (A,1,A): [(X,3,A)],
-        (X,3,A): [(FIN,FEX,A)]}]
-        bnftranslator.transform_recursion(nfa,(A,1,A))
+        (A,0,0,A),
+        {(A,0,0,A): [(A,1,0,A),(B,2,0,A)],
+        (B,2,0,A): [(FIN,FEX,0,A)],
+        (A,1,0,A): [(X,3,0,A)],
+        (X,3,0,A): [(FIN,FEX,0,A)]}]
+        bnftranslator.transform_recursion(nfa,(A,1,0,A))
         pprint.pprint(nfa[2])
 
     def test_eliminate_left_recursion(self):
@@ -32,13 +32,13 @@ class TestLeftRecElimination(unittest.TestCase):
         C = 4
         Y = 5
         nfa = ["A: A X Y | B | C",
-        (A,0,A),
-        {(A,0,A): [(A,1,A),(B,2,A),(C,4,A)],
-        (B,2,A): [(FIN,FEX,A)],
-        (C,4,A): [(FIN,FEX,A)],
-        (A,1,A): [(X,3,A)],
-        (X,3,A): [(Y,5,A)],
-        (Y,5,A): [(FIN,FEX,A)]}]
+        (A,0,0,A),
+        {(A,0,0,A): [(A,1,0,A),(B,2,0,A),(C,4,0,A)],
+        (B,2,0,A): [(FIN,FEX,0,A)],
+        (C,4,0,A): [(FIN,FEX,0,A)],
+        (A,1,0,A): [(X,3,0,A)],
+        (X,3,0,A): [(Y,5,0,A)],
+        (Y,5,0,A): [(FIN,FEX,0,A)]}]
         bnftranslator.eliminate_left_recursion(nfa)
         pprint.pprint(nfa[2])
 
@@ -49,14 +49,14 @@ class TestLeftRecElimination(unittest.TestCase):
         C = 4
         Y = 5
         nfa = ["A: A X Y | A B | C",
-        (A,0,A),
-        {(A,0,A): [(A,1,A),(A,6,A),(C,4,A)],
-        (A,6,A): [(B,2,A)],
-        (B,2,A): [(FIN,FEX,A)],
-        (C,4,A): [(FIN,FEX,A)],
-        (A,1,A): [(X,3,A)],
-        (X,3,A): [(Y,5,A)],
-        (Y,5,A): [(FIN,FEX,A)]}]
+        (A,0,0,A),
+        {(A,0,0,A): [(A,1,0,A),(A,6,0,A),(C,4,0,A)],
+        (A,6,0,A): [(B,2,0,A)],
+        (B,2,0,A): [(FIN,FEX,0,A)],
+        (C,4,0,A): [(FIN,FEX,0,A)],
+        (A,1,0,A): [(X,3,A)],
+        (X,3,0,A): [(Y,5,0,A)],
+        (Y,5,0,A): [(FIN,FEX,0,A)]}]
         # A: C (X Y | B )*
         bnftranslator.eliminate_left_recursion(nfa)
         pprint.pprint(nfa[2])
@@ -65,14 +65,14 @@ class TestLeftRecElimination(unittest.TestCase):
         A = 1
         B = 2
         nfa = ["A: A A A | A A | B",
-        (A,0,A),
-        {(A,0,A): [(A,1,A),(A,2,A),(B,3,A)],
-        (A,1,A): [(A,5,A)],
-        (A,5,A): [(A,6,A)],
-        (B,3,A): [(FIN,FEX,A)],
-        (A,6,A): [(FIN,FEX,A)],
-        (A,2,A): [(A,4,A)],
-        (A,4,A): [(FIN,FEX,A)]}]
+        (A,0,0,A),
+        {(A,0,0,A): [(A,1,0,A),(A,2,0,A),(B,3,0,A)],
+        (A,1,0,A): [(A,5,0,A)],
+        (A,5,0,A): [(A,6,0,A)],
+        (B,3,0,A): [(FIN,FEX,0,A)],
+        (A,6,0,A): [(FIN,FEX,0,A)],
+        (A,2,0,A): [(A,4,0,A)],
+        (A,4,0,A): [(FIN,FEX,0,A)]}]
         # A: B (A | A A)*
         bnftranslator.eliminate_left_recursion(nfa)
         pprint.pprint(nfa[2])

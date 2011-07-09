@@ -54,12 +54,12 @@ class LangletTransformer(BaseClass("Transformer", parent_langlet)):
         rhs = find_node(node, self.symbol.rhs, depth = 1)
         if rhs:
             self.nullidx+=1
-            return AltRule([EmptyRule([(None, self.nullidx)]), self.rhs(rhs)])
+            return AltRule([EmptyRule([(FIN, self.nullidx)]), self.rhs(rhs)])
         else:
             atom = self.atom(find_node(node, self.symbol.atom))
             if find_node(node, self.token.STAR, depth=1):
                 self.nullidx+=1
-                return AltRule([EmptyRule([(None, self.nullidx)]), atom, SequenceRule([atom, atom])])
+                return AltRule([EmptyRule([(FIN, self.nullidx)]), atom, SequenceRule([atom, atom])])
             elif find_node(node, self.token.PLUS, depth=1):
                 return AltRule([atom, SequenceRule([atom, atom])])
             else:

@@ -16,4 +16,4 @@ _experimental/*
 
 
 syntax: regexp
-^langlets/(?!python|gallery|p4d|coverage|ls_grammar|teuton|c).*
+^langlets/(?!python|gallery|p4d|coverage|ls_grammar).*

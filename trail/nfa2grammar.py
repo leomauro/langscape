@@ -206,7 +206,7 @@ def futures(start, trans):
         _future(s, set())
     D = {}
     for s, follow in F.items():
-        D[s[1]] = set([f[1] for f in follow  if f[1]!='-'])
+        D[s[1]] = set([f[1] for f in follow  if f[1]!=FEX])
     return D
 
 def new_state(start, n):
@@ -235,7 +235,7 @@ def create_span(state, nfa, future, memo):
 class SimpleReduction(object):
     def __init__(self, nfa):
         _, start, trans = nfa
-        self.fin = (FIN, "-", start[-1])
+        self.fin = (FIN, FEX, 0, start[-1])
 
     def _find_maybe(self, start, trans, visited):
         visited.add(start)
@@ -453,7 +453,7 @@ class TreeRule(object):
         self.memo  = memo
         self.start = nfa[1]
         self.trans = nfa[2]
-        self.fin   = (FIN, "-", self.start[-1])
+        self.fin   = (FIN, FEX, 0, self.start[-1])
 
     def run(self):
         follow = self.trans[self.start]
@@ -866,7 +866,7 @@ class ComplexCycleTranslator(object):
             elif p not in cycle_data.Bundle:
                 del trans[p]
         trans[start] = list(cycle_data.Init)
-        exit_symbol = (FIN, '-', start[0])
+        exit_symbol = (FIN, FEX, 0, start[0])
         for q in trans:
             follow = trans[q]
             for p in cycle_data.Post:

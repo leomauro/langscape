@@ -7,9 +7,9 @@ file_input = 111001
 rule = 111002
 rhs = 111003
 alt = 111004
-variable = 111005
-item = 111006
-atom = 111007
+item = 111005
+atom = 111006
+variable = 111007
 repeated = 111008
 
 #--end constants--

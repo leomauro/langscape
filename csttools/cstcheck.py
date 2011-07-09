@@ -52,7 +52,7 @@ class NodeChecker(object):
                 else:
                     self._error = (node, i+1, selection)
                     return False
-        if None not in selection:
+        if FIN not in selection:
             self._error = (node, len(node)+1, selection)
             return False
         return True
@@ -98,7 +98,7 @@ class NodeChecker(object):
             if i+1 == k:
                 snode.append(indent+"~"*len(name))
         if k>len(node):
-            snode.append(indent+"None")
+            snode.append(indent+"FIN")
             snode.append(indent+"~~~~")
         return "\n".join(snode)
 
@@ -106,8 +106,8 @@ class NodeChecker(object):
         symbols = []
         llid    = self.langlet.langlet_id/LANGLET_ID_OFFSET
         for s in selection:
-            if s is None:
-                symbols.append("None")
+            if s is FIN:
+                symbols.append("FIN")
             else:
                 symbols.append("(%d.%s, %s)"%(llid, s, self.langlet.get_node_name(s)))
         s = ["One of the following symbols must be used:\n"]

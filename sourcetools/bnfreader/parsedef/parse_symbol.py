@@ -2,12 +2,13 @@
 
 #--begin constants--
 
-file_input = 981000
-rule = 981001
-rhs = 981002
-alt = 981003
-item = 981004
-atom = 981005
+eval_input = 981000
+file_input = 981001
+rule = 981002
+rhs = 981003
+alt = 981004
+item = 981005
+atom = 981006
 
 #--end constants--
 

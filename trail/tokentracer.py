@@ -5,7 +5,7 @@ TODO:
 
 
 
-The basic problem of NFAs is that the continuation of (FIN, '-', R) is context dependent. Depending
+The basic problem of NFAs is that the continuation of (FIN, FEX, 0, R) is context dependent. Depending
 on how R gets entered ( in which NFA R is embedded ) we find nodes R1, ..., Rk which continue R. However
 those nodes are all well known and associated to states.
 

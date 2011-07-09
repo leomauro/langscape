@@ -10,7 +10,7 @@ class NFAState:
 
             Statelists containing more than one state have the form ::
 
-                [(a1, '.', i1, b1), (b1, '.', i2, b2), ..., (bk, ik, ck)]
+                [(a1, i1, TRAIL_SKIP, b1), (b1, i2, TRAIL_SKIP, b2), ..., (bk, ik, 0, ck)]
 
             They are linked lists of states where all but the last one is transitional.
         '''
@@ -33,11 +33,9 @@ class TreeBuilder(object):
         cycle  = []
 
         for state, tok in states[1:]:
-            nid  = state[0]
-            link = state[-1]
-            IDX  = state[1]
+            nid, IDX, ext, link  = state
 
-            if IDX == TRAIL_SKIP:
+            if ext == TRAIL_SKIP:
                 rule.pop()
                 for i in xrange(len(tree)-1, -1, -1):
                     if tree[i] == nid:
@@ -50,13 +48,13 @@ class TreeBuilder(object):
                 else:
                     raise ValueError("Failed to derive tree."
                                      "Cannot build node [%s, ...]"%root)
-            elif IDX == '(':
+            elif ext == TRAIL_OPEN:
                 tree.append(state)
                 cycle.append(state)
-            elif IDX == ')':
+            elif ext == TRAIL_CLOSE:
                 if cycle:
                     rec = cycle.pop()
-                    if (rec[0], rec[2], rec[3]) != (state[0], state[2], state[3]):
+                    if (rec[0], rec[1], rec[3]) != (state[0], state[1], state[3]):
                         raise ValueError("Failed to derive tree."
                                          "Cannot build node [%s, ...]"%root)
                 else:
@@ -65,7 +63,7 @@ class TreeBuilder(object):
                 for i in xrange(len(tree)-1, -1, -1):
                     t_i = tree[i]
                     if type(t_i) == tuple:
-                        if t_i[1] == '(':
+                        if t_i[1] == TRAIL_OPEN:
                             tree, T = tree[:i], tree[i+1:]
                             if tree:
                                 T.insert(0, link)
@@ -148,7 +146,7 @@ class NFAStateSetSequence:
         trace = []
         nfastates = self.states[0]
         nid = nfastates.nfastates.itervalues().next().state[0]
-        S = (FIN, FEX, nid)
+        S = (FIN, FEX, 0, nid)
         trace.append([S,[]])
         for prev in self.states[::-1]:
             try:
@@ -252,7 +250,7 @@ class NFACursor:
         # function is pure and its value can be cached.
         follow = []
         for S in self.transitions[state]:
-            if S[1] in TRAIL_CONTROL:
+            if S[2] in TRAIL_CONTROL:
                 for F in self.follow_states(S):
                     follow.append(F+[S])
             else:

@@ -1,3 +1,5 @@
+# base+ext checksum: 400669996
+
 eval_input: rule ENDMARKER
 file_input: ( rule | NEWLINE )* ENDMARKER
 rule: NAME ':' rhs NEWLINE

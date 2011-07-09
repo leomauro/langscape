@@ -42,7 +42,7 @@ def compute_minimal_state_traces(nfa):
         if (FIN, '-', start[0]) in trans[S]:
             traces.append(T1[1:])
         else:
-            T2 = compute_tr_with_target(S, (FIN, '-', start[0]), nfa)
+            T2 = compute_tr_with_target(S, (FIN, FEX, 0, start[0]), nfa)
             T = T1[1:]+T2[1:-1]
             traces.append(T)
     return traces
@@ -375,7 +375,7 @@ def compute_super_tr(langlet,
                         trace.append(state)
                         if state == S:
                             # compute tail
-                            trace+=compute_tr_with_target(S, (FIN, '-', nid), nfa)[1:-1]
+                            trace+=compute_tr_with_target(S, (FIN, FEX, 0, nid), nfa)[1:-1]
                             break
                 else:
                     trace.append(state)

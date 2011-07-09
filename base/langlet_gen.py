@@ -138,7 +138,7 @@ class LangletGenerator(object):
             pth_conf = pth_langlet.joinpath("langlet_config.py")
             pth_conf_template = pth_langlet.joinpath("langlet_config.strtempl")
             with open(pth_conf,"w") as f_conf:
-                f_conf.write(self.create_conf_py(lnlt_id, pth_conf_template))
+                f_conf.write(self.create_langlet_config_py(lnlt_id, pth_conf_template))
             pth_langlet.joinpath("run.py").rename(pth_langlet.joinpath("run_"+self.name+".py"))
             pth_langlet.joinpath("langlet_config.strtempl").remove()
 

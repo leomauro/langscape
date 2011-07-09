@@ -18,7 +18,7 @@ import pprint
 #          langscape.
 #
 
-USE_EE = False
+MODIFY_GRAMMAR = False
 
 import langscape
 import langscape.util
@@ -26,13 +26,11 @@ import langscape.trail.nfaexpansion as nfaexpansion
 from langscape.csttools.cstutil import*
 
 
-if USE_EE:
-    from EasyExtend.langlets.grammar_langlet.rules import*
+if MODIFY_GRAMMAR:
+    from langscape1.langlets.ls_grammar.rules import*
 else:
     from langscape.langlets.ls_grammar.rules import*
 
-from langscape.ls_const import*
-from langscape.util import flip
 
 class NFAData:
     def __init__(self, nfas):
@@ -99,7 +97,7 @@ class NFAData:
         pre = []
         for L, T in transitions.items():
             if label in T:
-                if L[1] in TRAIL_CONTROL:
+                if L[2] in TRAIL_CONTROL:
                     pre+=self.compute_predecessor(nfa, L)
                 else:
                     pre.append(L)
@@ -117,7 +115,7 @@ class NFAData:
         succ = []
         T = transitions[label]
         for L in T:
-            if L[1] == '.':
+            if L[2] == TRAIL_SKIP:
                 succ+=self.compute_successor(nfa, L)
             else:
                 succ.append(L)
@@ -152,7 +150,7 @@ class NFAData:
         fin_cycles = {}
         for r, nfa in self.nfas.items():
             T = set()
-            fin_set = set(self.compute_predecessor(nfa, (FIN, FEX, r)))
+            fin_set = set(self.compute_predecessor(nfa, (FIN, FEX, 0, r)))
             transitions = nfa[2]
             for L in fin_set:
                 T.update(transitions[L])
@@ -194,7 +192,7 @@ class NFAData:
 
         def end_trans(r):
             nfa = self.nfas[r]
-            labels = self.compute_predecessor(nfa, (FIN, FEX, r))
+            labels = self.compute_predecessor(nfa, (FIN, FEX, 0, r))
             return set([L[0] for L in labels])
 
         end_transitions = {}
@@ -255,7 +253,7 @@ class NFAData:
                 raise NodeCycleError, "Immediate left recusion in grammar detected at node %s. Trail can't build parse tables."%NT
             visited.add(NT)
             nfa = self.nfas[NT]
-            selection = set([s[0] for s in self.compute_successor(nfa, (NT,0,NT)) if s[0]!=FIN])
+            selection = set([s[0] for s in self.compute_successor(nfa, (NT, 0, 0, NT)) if s[0]!=FIN])
             self.reachables[NT] = set()
             for s in selection:
                 if not is_token(s) and s!=NT:
@@ -463,12 +461,12 @@ def nfa_reduction(nfa):
     return nfa
 
 def parse_grammar(source):
-    if USE_EE:
-        from EasyExtend.langlets.grammar_langlet.langlet import parse_grammar_rule
-        return parse_grammar_rule(source)
+    if MODIFY_GRAMMAR:
+        import langscape1 as ls
     else:
-        ls_grammar = langscape.load_langlet("ls_grammar")
-        return ls_grammar.compile(source)
+        ls = langscape
+    ls_grammar = ls.load_langlet("ls_grammar")
+    return ls_grammar.compile(source)
 
 
 class NFAGenerator(object):
@@ -491,7 +489,7 @@ class NFAGenerator(object):
         for rule_name, (rule, ebnf) in rules.items():
             table  = nfa_reduction(build_nfa(rule))
             r, nfa = self.insert_nids(rule_name, table, default)
-            return [ebnf.strip(), (r, 0, r), nfa]
+            return [ebnf.strip(), (r, 0, 0, r), nfa]
         else:
             raise ValueError("Could not parse string '%s' into grammar rule"%ebnf_str)
 
@@ -515,7 +513,7 @@ class NFAGenerator(object):
             nfa = build_nfa(rule)
             table  = nfa_reduction(nfa)
             r, nfa = self.insert_nids(rule_name, table)
-            self.nfas[r] = [ebnf.strip(), (r, 0, r), nfa]
+            self.nfas[r] = [ebnf.strip(), (r, 0, 0, r), nfa]
         S = self.unknown - self.used_strings
         if S:
             raise GrammarError(S, self.parser_type)
@@ -526,7 +524,7 @@ class NFAGenerator(object):
         def map_state(state, nid):
             name = state[0]
             if name is FIN:
-                return (FIN, FEX, nid)
+                return (FIN, FEX, 0, nid)
             elif name[0] in ("'", '"'):
                 name = name[1:-1]
                 self.used_strings.add(name)
@@ -537,9 +535,9 @@ class NFAGenerator(object):
                     k = self.kwd_index
                     self.keywords[S] = self.kwd_index
                     self.kwd_index+=1
-                return (k, state[1], nid)
+                return (k, state[1], 0, nid)
             else:
-                return (S, state[1], nid)
+                return (S, state[1], 0, nid)
         nid = self.get_nid(rule_name, default)
         nfa = {}
         for state, follow in table.items():
@@ -570,7 +568,9 @@ class NFAGenerator(object):
         self.nfadata.compute_toplevel()
         if self.parser_type == "Lexer":
             from langscape.trail.nfatools import compute_constants
-            self.nfadata.constants = compute_constants(self.nfadata.nfas, self.langlet.lex_token, flip(self.nfadata.keywords))
+            self.nfadata.constants = compute_constants(self.nfadata.nfas,
+                                                       self.langlet.lex_token,
+                                                       langscape.util.flip(self.nfadata.keywords))
 
     def expand_nfas(self, report = True, check_first_follow_conflict = True):
         if report:
@@ -642,7 +642,6 @@ class NFAGenerator(object):
         print >> fPyTrans
         print >> fPyTrans, "start_symbols  = "+pprint.pformat(self.nfadata.start_symbols)
         print >> fPyTrans
-
 
         if self.nfadata.lexer_terminal:
             print >> fPyTrans, "# lexer_terminal:"

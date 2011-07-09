@@ -42,28 +42,20 @@ def pprint_nfa(nfa, langlet):
         del trans[label]
         if type(label[0]) == str:
             new_label = label[:-1]+(langlet.get_node_name(label[-1]),)
-        elif len(label) == 4:
-            new_label = (langlet.get_node_name(label[0]),
-                         label[1],
-                         label[2],
-                         langlet.get_node_name(label[3]))
-        else:
-            new_label = (langlet.get_node_name(label[0]),
-                         label[1],
-                         langlet.get_node_name(label[2]))
+
+        new_label = (langlet.get_node_name(label[0]),
+                     label[1],
+                     label[2],
+                     langlet.get_node_name(label[3]))
         new_F = []
         for label in follow:
             if type(label[0]) == str or label[0] is FIN:
                 new_L = label[:-1]+(langlet.get_node_name(label[-1]),)
-            elif len(label) == 4:
-                new_L = (langlet.get_node_name(label[0]),
-                         label[1],
-                         label[2],
-                         langlet.get_node_name(label[3]))
-            else:
-                new_L = (langlet.get_node_name(label[0]),
-                         label[1],
-                         langlet.get_node_name(label[2]))
+
+            new_L = (langlet.get_node_name(label[0]),
+                     label[1],
+                     label[2],
+                     langlet.get_node_name(label[3]))
             new_F.append(new_L)
         trans[new_label] = new_F
     pprint.pprint(this_nfa)
@@ -73,7 +65,7 @@ def compute_follow_states(transitions, state):
     follow = []
     states = transitions[state]
     for s in states:
-        if s[1] in TRAIL_CONTROL:
+        if s[2] in TRAIL_CONTROL:
             follow+=compute_follow_states(transitions, s)
         else:
             follow.append(s)
@@ -101,7 +93,7 @@ def compute_branch_points(nfa):
     branch_points = set()
     trans = nfa[2]
     for S in trans:
-        if S[1] not in TRAIL_CONTROL and S[0]!=FIN:
+        if S[2] not in TRAIL_CONTROL and S[0]!=FIN:
             follow = compute_follow_states(trans, S)
             nids = {}
             for F in follow:
@@ -375,7 +367,7 @@ def compute_state_traces(nfa):
                 break
         else:
             T1 = compute_tr_with_target(start, S, nfa)
-            T2 = compute_tr_with_target(S, (FIN, FEX, start[0]), nfa)
+            T2 = compute_tr_with_target(S, (FIN, FEX, 0, start[0]), nfa)
             T = T1[1:]+T2[1:-1]
             traces.append(T)
     return traces

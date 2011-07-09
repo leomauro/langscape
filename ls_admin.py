@@ -56,6 +56,7 @@ def run_tests(name = "", exclude = ()):
     for directories named 'tests'. In those directories test_<name>.<suffix> files will be identified
     and executed as scripts.
     '''
+    remove_pyc()
     testpaths = []
     for P in path(langscape.__file__).dirname().walkdirs():
         S = P.splitall()
@@ -87,13 +88,16 @@ def run_tests(name = "", exclude = ()):
                     print e
                     return
 
-def check_experimental():
-    pass
+def remove_pyc():
+    for f in path(langscape.__file__).dirname().walkfiles():
+        if f.ext in (".pcv", ".pyc"):
+            f.remove()
+
 
 if __name__ == '__main__':
-    #rebuild_all()
+    rebuild_all()
     run_tests(name="", exclude=[])
-    #check_experimental()
+
 
 
 

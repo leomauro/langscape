@@ -199,7 +199,7 @@ class NFALexer(object):
         return False
 
     def _dbg_info(self, selection, char, T, move):
-        selected = "["+', '.join([(self.langlet.get_node_name(s, "lex") if s is not FIN else "None") for s in selection ])+"]"
+        selected = "["+', '.join([(self.langlet.get_node_name(s, "lex") if s is not FIN else "FIN") for s in selection ])+"]"
         try:
             if char in '\n':
                 char = '\\n'

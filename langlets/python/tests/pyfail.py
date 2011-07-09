@@ -1,7 +1,7 @@
 def foo():
     a = ("c",
         0,
-        (lambda x: 0+(lambda y: y/0)(2))(1),
+        (lambda x: 0+(lambda y: y/1)(2))(1),
         #b.p,
         0,
         1/0,

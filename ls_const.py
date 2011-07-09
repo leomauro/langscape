@@ -24,8 +24,11 @@ INTRON_NID        = 999
 
 # ---------------------------------------------------------------------------------------
 # trail specific constants
-TRAIL_SKIP    = '.'
-TRAIL_CONTROL = (TRAIL_SKIP, '(', ')', '+')
+TRAIL_SKIP    = 1
+TRAIL_OPEN    = 2
+TRAIL_CLOSE   = 3
+TRAIL_ADD     = 4
+TRAIL_CONTROL = (TRAIL_SKIP, TRAIL_OPEN, TRAIL_CLOSE, TRAIL_ADD)
 
 # ---------------------------------------------------------------------------------------
 # maximum allowed states in NFA
@@ -33,8 +36,8 @@ TRAIL_MAX_ALLOWED_STATES = 2000
 
 # ---------------------------------------------------------------------------------------
 # Special definitions used by characterizing states
-FIN = None
-FEX = '-'
+FIN = -1
+FEX = -1
 
 
 

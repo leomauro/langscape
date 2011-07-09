@@ -1,4 +1,5 @@
 import langscape
+import langscape
 
 from langscape.ls_const import*
 from langscape.sourcetools.tokgen import TokenGenerator

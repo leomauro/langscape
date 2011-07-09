@@ -23,12 +23,13 @@ def transform_recursion(nfa, state = None):
     Description ::
         Let L be the state passed to this function.
 
-        1) We map L using ShiftNested: (S, idx, T) -> (S, '(', idx, T)
-        2) We replace L by ShiftNested(L) in the NFA. If A -> [L, X, Y, ...] is a transition we collect
-           X, Y, ... within a separate list called Cont.
-        3) Replace (FIN, '-', S) by (S, ')', IDX, S) on each occurence.
+        1) We map L using ShiftNested: (S, idx, 0, T) -> (S, idx, TRAIL_OPEN, T)
+        2) We replace L by ShiftNested(L) in the NFA.
+           If A -> [L, X, Y, ...] is a transition we collect X, Y, ... within a separate
+           list called Cont.
+        3) Replace (FIN, FEX, 0, S) by (S, idx, TRAIL_CLOSE, S) on each occurence.
         4) Add the following transition:
-           (S, ')', IDX, S) -> [(FIN, '-', S)]+Cont
+           (S, idx, TRAIL_CLOSE, S) -> [(FIN, FEX, 0, S)]+Cont
     '''
     trans = nfa[2]
     nid   = nfa[1][0]
@@ -37,7 +38,7 @@ def transform_recursion(nfa, state = None):
     if state is None:
         for L in trans:
             if L[0] == nid:
-                if L[1] == '(':
+                if L[2] == TRAIL_OPEN:
                     return # recusion eliminated
                 elif L[1] != 0:
                     state = L
@@ -45,9 +46,9 @@ def transform_recursion(nfa, state = None):
         else:
             raise RuntimeError("No recursion to eliminate in rule `%s`"%self.node_name(nid))
     # assert state[0] == S, "Unable to embedd state: %s %s"%(state, S)
-    LEFT    = (nid, '(', state[1], state[2])
-    RIGHT   = (nid, ')', state[1], state[2])
-    EXIT    = (FIN, '-', nid)
+    LEFT    = (nid, state[1], TRAIL_OPEN, state[3])
+    RIGHT   = (nid, state[1], TRAIL_CLOSE, state[3])
+    EXIT    = (FIN, FEX, 0, nid)
     CONT    = trans[state][:]
     FIRST   = trans[nfa[1]]
     # print "TRANSIT", state, transit
@@ -80,8 +81,8 @@ def eliminate_left_recursion(nfa):
         first_follow = trans[start]
         for f in first_follow:
             if f[0] == nid:
-                LEFT = (f[0],"(",f[1], f[2])
-                RIGHT = (f[0],")",f[1], f[2])
+                LEFT = (f[0], f[1], TRAIL_OPEN, f[3])
+                RIGHT = (f[0], f[1], TRAIL_CLOSE, f[3])
                 transform_recursion(nfa, f)
                 break
         else:

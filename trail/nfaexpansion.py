@@ -172,7 +172,7 @@ class NFAExpansion(object):
         next_states = []
         states = transitions[state]
         for S in states:
-            if S[1] in TRAIL_CONTROL:
+            if S[2] in TRAIL_CONTROL:
                 follow = self._get_next_state(transitions, S, stack)
                 next_states+=follow
             else:
@@ -188,7 +188,7 @@ class NFAExpansion(object):
         transitions_redux = {}
         transitions = self.nfadata.nfas[r][2]
         for state in transitions:
-            if state[1] in TRAIL_CONTROL:
+            if state[2] in TRAIL_CONTROL:
                 continue
             follow = self._get_next_state(transitions, state, [])
             transitions_redux[state] = follow
@@ -210,8 +210,7 @@ class NFAExpansion(object):
                 # multiple contains all states of a given nid
                 multiple = [state for state in selection if state[0] == s]
                 if len(multiple)>1:
-                    # multiindex is a tuple of indices -- control characters should
-                    # be eliminated
+                    # multiindex is a tuple of indices
                     multiindex = tuple(sorted([state[1] for state in multiple]))
                     if multiindex in index_set:
                         continue
@@ -317,8 +316,8 @@ class NFAExpansion(object):
         trans_Z    = Z[2]
         follow_A = trans_A[start_A]
 
-        # this will replace the exit symbol (FIN, FEX, nid_A) in the shifted NFA.
-        transit  = (state[0], TRAIL_SKIP, self.shifter, state[-1])
+        # this will replace the exit symbol (FIN, FEX, 0, nid_A) in the shifted NFA.
+        transit  = (state[0], self.shifter, TRAIL_SKIP, state[-1])
         if state[0] == state[-1]:
             R_NAME = A[0].split(":")[0]
             raise RuntimeError("no expansion of `%s` possible in `%s`!"%(R_NAME, Z[1]))
@@ -379,12 +378,9 @@ class NFAExpansion(object):
         trans  = nfa[2]
         states = trans.keys()
         state_map = {}
-        states.sort(key = lambda state: ( state[1] if state[1] not in TRAIL_CONTROL else state[2]))
+        states.sort(key = lambda s: s[1])
         for state in states:
-            if state[1] in TRAIL_CONTROL:
-                state_map[state] = (state[0], state[1], shift, state[3])
-            else:
-                state_map[state] = (state[0], shift, state[2])
+            state_map[state] = (state[0], shift, state[2], state[3])
             shift+=1
         self.shifter += START_SHIFTER
 
@@ -674,7 +670,8 @@ class NFAExpansionLexer(NFAExpansion):
         self.nfadata.lexer_terminal = self.lexer_terminal
         LexerTerminalSet.max_tid = 0
 
-    def expand(self, rule = 0, visited = set()):
+    def expand(self, rule = 0, visited = None):
+        visited = visited or set()
         if not rule:
             rule = self.start_symbol
         start = self.nfadata.nfas[rule][1]
@@ -741,10 +738,10 @@ class NFAExpansionLexer(NFAExpansion):
                     nids = self.replace_keywords(nids)
                     for n in nids:
                         i = 0
-                        new_state = (n, state[1]+i, state[-1])
+                        new_state = (n, state[1]+i, 0, state[-1])
                         while nfa.get(new_state):
                             i+=1
-                            new_state = (n, state[1]+i, state[-1])
+                            new_state = (n, state[1]+i, 0, state[-1])
                         nfa[new_state] = follow
                         new_states.append(new_state)
                     for trans in nfa.values():
@@ -880,6 +877,4 @@ class NFAExpansionLexer(NFAExpansion):
                 break
 
 
-if __name__ == '__main__':
-    import langscape
-    langscape.load_langlet("Breeed")
+
